@@ -1,0 +1,12 @@
+**/node_modules
+**/.next
+**/dist
+**/coverage
+**/*.log
+.git
+.env
+.env.*
+!.env.example
+packages/db/src/generated
+docs
+claude.md
