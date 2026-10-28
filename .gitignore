@@ -8,3 +8,4 @@ coverage
 !.env.example
 claude.md
 docs/spec.md
+packages/db/src/generated
