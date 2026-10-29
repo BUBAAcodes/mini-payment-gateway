@@ -1,7 +1,11 @@
 import { inject } from 'vitest';
 import { newId } from '@gateway/shared';
-import { createPrismaClient } from '../src/client';
-import type { PaymentStatus, PrismaClient } from '../src/generated/prisma/client';
+import { createPrismaClient } from '../client';
+import type { PaymentStatus, PrismaClient } from '../generated/prisma/client';
+// Type-only: brings in the `databaseUrl` typing for inject() without loading Testcontainers.
+import type {} from './global-setup';
+
+// Test helpers for any package that runs against the Testcontainers Postgres from global-setup.
 
 /** A client for the test container. Every test file shares the database, so use fresh IDs. */
 export function testPrisma(): PrismaClient {

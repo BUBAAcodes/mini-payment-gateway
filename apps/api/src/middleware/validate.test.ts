@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { z } from 'zod';
 import { amountSchema } from '@gateway/shared';
+import { createPrismaClient } from '@gateway/db';
 import { createApp } from '../app';
 import { validate } from './validate';
 
 const app = createApp({
+  // Never queried: these routes don't touch the database, and the client connects lazily.
+  db: createPrismaClient('postgresql://localhost/unused'),
   checkDb: async () => {},
   extraRoutes: (router) => {
     router.post(

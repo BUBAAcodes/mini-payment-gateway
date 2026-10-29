@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { randomBase62 } from './ids';
 
 /** How much of an API key we store in the clear, to find its row. "sk_test_" plus 4 characters. */
@@ -6,6 +6,17 @@ export const API_KEY_PREFIX_LENGTH = 12;
 
 export function sha256Hex(value: string): string {
   return createHash('sha256').update(value).digest('hex');
+}
+
+/**
+ * Compares two strings in constant time, so an attacker can't learn a secret one byte at a time
+ * from response timings. Only the length can leak, and hashes and signatures have a fixed length.
+ */
+export function constantTimeEqual(a: string, b: string): boolean {
+  const left = Buffer.from(a, 'utf8');
+  const right = Buffer.from(b, 'utf8');
+  // timingSafeEqual throws on different lengths.
+  return left.length === right.length && timingSafeEqual(left, right);
 }
 
 export interface GeneratedApiKey {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { NotFoundError } from '@gateway/shared';
+import { createPrismaClient } from '@gateway/db';
 import { createApp } from './app';
 
 const dbUp = async () => {};
@@ -8,8 +9,12 @@ const dbDown = async () => {
   throw new Error('connect ECONNREFUSED');
 };
 
+// These tests never reach the database; the client connects lazily, so it never tries.
+const db = createPrismaClient('postgresql://localhost/unused');
+
 function testApp(checkDb = dbUp) {
   return createApp({
+    db,
     checkDb,
     // Extra routes that only exist in tests, to exercise the error handler.
     extraRoutes: (router) => {

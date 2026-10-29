@@ -1,7 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { newId } from '@gateway/shared';
 import type { Merchant, PrismaClient } from '../src/generated/prisma/client';
-import { createMerchant, createOrder, createPayment, systemAccount, testPrisma } from './helpers';
+import {
+  createMerchant,
+  createOrder,
+  createPayment,
+  systemAccount,
+  testPrisma,
+} from '../src/testing';
 
 let prisma: PrismaClient;
 let merchant: Merchant;

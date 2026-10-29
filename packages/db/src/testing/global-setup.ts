@@ -9,7 +9,7 @@ declare module 'vitest' {
   }
 }
 
-const dbPackageDir = fileURLToPath(new URL('..', import.meta.url));
+const dbPackageDir = fileURLToPath(new URL('../..', import.meta.url));
 
 /** A real, throwaway Postgres 17 with our migrations applied, the same way CI and Neon get them. */
 export default async function setup(project: TestProject) {

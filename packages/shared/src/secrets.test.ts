@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
+  constantTimeEqual,
   generateApiKey,
   generateCheckoutSecret,
   generateClientSecret,
@@ -13,6 +14,26 @@ describe('sha256Hex', () => {
     expect(sha256Hex('abc')).toBe(
       'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
     );
+  });
+});
+
+describe('constantTimeEqual', () => {
+  it('is true for equal strings', () => {
+    expect(constantTimeEqual('abc123', 'abc123')).toBe(true);
+    expect(constantTimeEqual('', '')).toBe(true);
+  });
+
+  it('is false for different strings of the same length', () => {
+    expect(constantTimeEqual('abc123', 'abc124')).toBe(false);
+  });
+
+  it('is false, without throwing, when the lengths differ', () => {
+    expect(constantTimeEqual('abc', 'abcd')).toBe(false);
+    expect(constantTimeEqual('abcd', '')).toBe(false);
+  });
+
+  it('compares bytes, so multi-byte characters of equal string length differ', () => {
+    expect(constantTimeEqual('₹', 'a')).toBe(false);
   });
 });
 

@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { calculateFee, decryptSecret, sha256Hex } from '@gateway/shared';
 import type { PrismaClient } from '../src/generated/prisma/client';
 import { DEMO_LOGIN, seedDemo, type SeedCreated } from '../src/seed';
-import { testPrisma } from './helpers';
+import { testPrisma } from '../src/testing';
 
 const encryptionKey = randomBytes(32).toString('base64');
 const options = { encryptionKey, feeBps: 200, storeBaseUrl: 'http://store.test' };
