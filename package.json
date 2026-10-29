@@ -10,7 +10,10 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "db:migrate": "pnpm --filter @gateway/db migrate",
+    "db:seed": "pnpm --filter @gateway/db seed",
+    "db:reset": "pnpm --filter @gateway/db reset"
   },
   "license": "ISC",
   "packageManager": "pnpm@10.26.2",
