@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   AppError,
   ConflictError,
+  IdempotencyInProgressError,
+  IdempotencyMismatchError,
   InvalidStateError,
   NotFoundError,
   RateLimitedError,
@@ -16,6 +18,8 @@ describe('error classes', () => {
     [new UnauthorizedError(), 401, 'unauthorized'],
     [new NotFoundError('payment'), 404, 'not_found'],
     [new ConflictError('order already paid'), 409, 'conflict'],
+    [new IdempotencyInProgressError(), 409, 'idempotency_in_progress'],
+    [new IdempotencyMismatchError(), 422, 'idempotency_mismatch'],
     [new InvalidStateError('payment is not captured'), 422, 'invalid_state'],
     [new RateLimitedError(), 429, 'rate_limited'],
   ] as const)('%s has the right status and code', (err, status, code) => {

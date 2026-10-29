@@ -35,6 +35,7 @@ services:
       LOG_LEVEL: info
       # Read from the root .env; Compose refuses to start the API without it.
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY in .env}
+      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
     ports:
       - '4000:4000'
     depends_on:

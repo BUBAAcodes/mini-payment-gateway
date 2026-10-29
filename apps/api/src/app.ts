@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 import type { Logger } from 'pino';
 import type { PrismaClient } from '@gateway/db';
+import type { AppConfig } from './config';
 import { createLogger } from './logger';
 import { errorHandler, notFoundHandler } from './middleware/errors';
 import { assignRequestId } from './middleware/request-id';
@@ -12,6 +13,7 @@ import { merchantRouter } from './routes/merchant';
 export interface AppDeps {
   db: PrismaClient;
   checkDb: CheckDb;
+  config: AppConfig;
   logger?: Logger;
   /** Mounts more routes before the 404 handler. Tests use it to exercise middleware. */
   extraRoutes?: (router: Router) => void;
@@ -23,6 +25,7 @@ const defaultLogger = () => createLogger(process.env.NODE_ENV === 'test' ? 'sile
 export function createApp({
   db,
   checkDb,
+  config,
   logger = defaultLogger(),
   extraRoutes,
 }: AppDeps): Express {
@@ -34,7 +37,7 @@ export function createApp({
   app.use(express.json({ limit: '100kb' }));
 
   app.use(healthRouter(checkDb));
-  app.use('/v1', merchantRouter(db));
+  app.use('/v1', merchantRouter(db, config));
   if (extraRoutes) {
     const router = Router();
     extraRoutes(router);

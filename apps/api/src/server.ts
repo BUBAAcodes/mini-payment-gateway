@@ -9,6 +9,7 @@ const logger = createLogger(config.LOG_LEVEL);
 const app = createApp({
   logger,
   db: prisma,
+  config,
   checkDb: () => prisma.$queryRaw`SELECT 1`,
 });
 

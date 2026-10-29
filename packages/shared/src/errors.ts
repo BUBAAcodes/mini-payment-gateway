@@ -50,6 +50,28 @@ export class ConflictError extends AppError {
   }
 }
 
+/** The first request with this Idempotency-Key hasn't finished yet. Retry later. */
+export class IdempotencyInProgressError extends AppError {
+  constructor() {
+    super(
+      'idempotency_in_progress',
+      'A request with this Idempotency-Key is still in progress. Retry shortly.',
+      409,
+    );
+  }
+}
+
+/** The Idempotency-Key was already used for a different request. */
+export class IdempotencyMismatchError extends AppError {
+  constructor() {
+    super(
+      'idempotency_mismatch',
+      'This Idempotency-Key was already used with a different request body or endpoint.',
+      422,
+    );
+  }
+}
+
 export class InvalidStateError extends AppError {
   constructor(message: string) {
     super('invalid_state', message, 422);

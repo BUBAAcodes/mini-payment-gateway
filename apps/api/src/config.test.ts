@@ -33,4 +33,17 @@ describe('loadConfig', () => {
       expect.objectContaining({ message: expect.not.stringContaining(value) }),
     );
   });
+
+  it('defaults WEB_BASE_URL to the local web app', () => {
+    expect(loadConfig(validEnv).WEB_BASE_URL).toBe('http://localhost:3000');
+  });
+
+  it('accepts an http(s) WEB_BASE_URL and rejects anything else', () => {
+    const url = 'https://web.example';
+    expect(loadConfig({ ...validEnv, WEB_BASE_URL: url }).WEB_BASE_URL).toBe(url);
+    expect(() => loadConfig({ ...validEnv, WEB_BASE_URL: 'web.example' })).toThrow(/WEB_BASE_URL/);
+    expect(() => loadConfig({ ...validEnv, WEB_BASE_URL: 'ftp://web.example' })).toThrow(
+      /WEB_BASE_URL/,
+    );
+  });
 });

@@ -1,12 +1,15 @@
 import { Router } from 'express';
 import type { PrismaClient } from '@gateway/db';
+import type { AppConfig } from '../../config';
 import { requireApiKey } from '../../middleware/auth';
+import { ordersRouter } from './orders';
 import { paymentsRouter } from './payments';
 
 /** The merchant API under /v1. Every route here needs a valid API key. */
-export function merchantRouter(db: PrismaClient): Router {
+export function merchantRouter(db: PrismaClient, config: AppConfig): Router {
   const router = Router();
   router.use(requireApiKey(db));
+  router.use(ordersRouter(db, config));
   router.use(paymentsRouter(db));
   return router;
 }

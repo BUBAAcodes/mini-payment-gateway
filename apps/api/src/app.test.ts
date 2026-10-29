@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { NotFoundError } from '@gateway/shared';
@@ -16,6 +17,10 @@ function testApp(checkDb = dbUp) {
   return createApp({
     db,
     checkDb,
+    config: {
+      WEB_BASE_URL: 'https://web.test',
+      APP_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
+    },
     // Extra routes that only exist in tests, to exercise the error handler.
     extraRoutes: (router) => {
       router.post('/echo', (req, res) => {

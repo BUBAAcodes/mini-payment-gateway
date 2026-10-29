@@ -11,9 +11,16 @@ const configSchema = z.object({
   APP_ENCRYPTION_KEY: z
     .string({ error: 'Required: 32 random bytes, base64-encoded' })
     .refine(isValidEncryptionKey, 'Must be 32 random bytes, base64-encoded'),
+  // Where the checkout page lives; order responses link to {WEB_BASE_URL}/pay/{orderId}.
+  WEB_BASE_URL: z
+    .url({ protocol: /^https?$/, error: 'Must be an http or https URL' })
+    .default('http://localhost:3000'),
 });
 
 export type Config = z.infer<typeof configSchema>;
+
+/** The settings request handlers need. Startup-only settings (port, DB URL) stay in server.ts. */
+export type AppConfig = Pick<Config, 'WEB_BASE_URL' | 'APP_ENCRYPTION_KEY'>;
 
 /** Reads config from the environment. Throws on startup instead of failing later on first use. */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {

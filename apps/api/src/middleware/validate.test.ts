@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { z } from 'zod';
@@ -10,6 +11,10 @@ const app = createApp({
   // Never queried: these routes don't touch the database, and the client connects lazily.
   db: createPrismaClient('postgresql://localhost/unused'),
   checkDb: async () => {},
+  config: {
+    WEB_BASE_URL: 'https://web.test',
+    APP_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
+  },
   extraRoutes: (router) => {
     router.post(
       '/orders/:id',
