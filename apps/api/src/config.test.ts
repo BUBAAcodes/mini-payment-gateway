@@ -46,4 +46,16 @@ describe('loadConfig', () => {
       /WEB_BASE_URL/,
     );
   });
+
+  it('defaults the fake bank delay to longer than our bank timeout', () => {
+    const config = loadConfig(validEnv);
+    expect(config.BANK_SLOW_MS).toBe(20_000);
+    expect(config.BANK_TIMEOUT_MS).toBe(10_000);
+  });
+
+  it('reads bank timings from strings and rejects nonsense', () => {
+    expect(loadConfig({ ...validEnv, BANK_SLOW_MS: '500' }).BANK_SLOW_MS).toBe(500);
+    expect(() => loadConfig({ ...validEnv, BANK_TIMEOUT_MS: '-1' })).toThrow(/BANK_TIMEOUT_MS/);
+    expect(() => loadConfig({ ...validEnv, BANK_SLOW_MS: 'soon' })).toThrow(/BANK_SLOW_MS/);
+  });
 });

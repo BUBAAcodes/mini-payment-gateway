@@ -232,6 +232,7 @@ async function seedPayment(tx: Prisma.TransactionClient, ctx: SeedContext, sampl
       type: 'payment',
       amount: payment.amount,
       outcome: captured ? 'approved' : 'declined',
+      declineReason: payment.failureReason,
       decidedAt: at,
       callbackSent: true,
       createdAt: at,

@@ -535,13 +535,18 @@ model BankTransaction {
   gatewayReference String              @map("gateway_reference")
   type             BankTransactionType
   amount           Int
+  /// The bank's decision, recorded when the request arrives. It answers "pending" until decided_at.
   outcome          BankOutcome         @default(pending)
+  /// insufficient_funds, card_declined, otp_invalid, invalid_vpa or refund_declined.
+  declineReason    String?             @map("decline_reason")
+  /// When the decision takes effect: about a second after the request, or BANK_SLOW_MS for slow@test.
   decidedAt        DateTime?           @map("decided_at") @db.Timestamptz(3)
   /// False for lost@test: the bank approved but never told us.
   callbackSent     Boolean             @default(false) @map("callback_sent")
   createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  @@index([gatewayReference])
+  // One record per payment attempt or refund, so a repeated request can't book it twice.
+  @@unique([gatewayReference, type])
   @@map("bank_transactions")
 }

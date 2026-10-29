@@ -182,6 +182,7 @@ describe('seedDemo', () => {
         type: 'payment',
         amount: p.amount,
         outcome: p.status === 'failed' ? 'declined' : 'approved',
+        declineReason: p.failureReason,
         callbackSent: true,
       });
       if (p.bankRef) expect(bankTxn.bankRef).toBe(p.bankRef);

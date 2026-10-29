@@ -15,6 +15,10 @@ const configSchema = z.object({
   WEB_BASE_URL: z
     .url({ protocol: /^https?$/, error: 'Must be an http or https URL' })
     .default('http://localhost:3000'),
+  // slow@test answers after BANK_SLOW_MS; we stop waiting for the bank after BANK_TIMEOUT_MS.
+  // Slow must be longer than the timeout, so slow@test exercises the "unknown" path (rule 10).
+  BANK_SLOW_MS: z.coerce.number().int().min(0).default(20_000),
+  BANK_TIMEOUT_MS: z.coerce.number().int().min(1).default(10_000),
 });
 
 export type Config = z.infer<typeof configSchema>;
