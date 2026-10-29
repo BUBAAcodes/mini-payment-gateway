@@ -16,6 +16,11 @@ function parseKey(keyB64: string): Buffer {
   return key;
 }
 
+/** True if the value is 32 bytes, base64-encoded: a usable APP_ENCRYPTION_KEY. */
+export function isValidEncryptionKey(keyB64: string): boolean {
+  return Buffer.from(keyB64, 'base64').length === KEY_BYTES;
+}
+
 /** Encrypts with a random IV. Returns "v1:<iv>:<tag>:<ciphertext>", each part base64. */
 export function encryptSecret(plaintext: string, keyB64: string): string {
   const key = parseKey(keyB64);

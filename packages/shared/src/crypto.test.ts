@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { decryptSecret, encryptSecret } from './crypto';
+import { decryptSecret, encryptSecret, isValidEncryptionKey } from './crypto';
 
 const key = randomBytes(32).toString('base64');
 const otherKey = randomBytes(32).toString('base64');
@@ -63,5 +63,17 @@ describe('encryptSecret / decryptSecret', () => {
     const [, iv, tag, ciphertext] = encryptSecret('x', key).split(':');
     expect(() => decryptSecret(`v1:${iv}:${tag}`, key)).toThrow(/format/);
     expect(() => decryptSecret(`v1:${iv}:AAAA:${ciphertext}`, key)).toThrow();
+  });
+});
+
+describe('isValidEncryptionKey', () => {
+  it('accepts 32 bytes, base64-encoded', () => {
+    expect(isValidEncryptionKey(key)).toBe(true);
+  });
+
+  it('rejects empty, short and long keys', () => {
+    expect(isValidEncryptionKey('')).toBe(false);
+    expect(isValidEncryptionKey(randomBytes(16).toString('base64'))).toBe(false);
+    expect(isValidEncryptionKey(randomBytes(33).toString('base64'))).toBe(false);
   });
 });

@@ -33,6 +33,8 @@ services:
       DATABASE_URL: postgresql://gateway:gateway@postgres:5432/gateway
       REDIS_URL: redis://redis:6379
       LOG_LEVEL: info
+      # Read from the root .env; Compose refuses to start the API without it.
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY in .env}
     ports:
       - '4000:4000'
     depends_on:
