@@ -22,7 +22,10 @@ export type AuthorizeRequest = {
 } & (UpiAuthorization | CardAuthorization);
 
 export interface RefundRequest {
-  /** Our rfnd_ ID. */
+  /**
+   * Our rfnd_ ID. The bank keys its record on it, so asking twice never refunds twice: the
+   * refund status checks rely on this to resend a refund the bank never received.
+   */
   gatewayReference: string;
   /** The pay_ ID being refunded. */
   paymentReference: string;

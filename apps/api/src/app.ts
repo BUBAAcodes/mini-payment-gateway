@@ -43,7 +43,7 @@ export function createApp({
   app.use(express.json({ limit: '100kb' }));
 
   app.use(healthRouter(checkDb));
-  app.use('/v1', merchantRouter(db, config));
+  app.use('/v1', merchantRouter({ db, bank, config }));
   app.use(
     '/checkout',
     checkoutRouter({

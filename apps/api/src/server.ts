@@ -3,6 +3,7 @@ import { createApp } from './app';
 import { loadConfig } from './config';
 import { createFakeBank } from './fake-bank';
 import { checkPendingPayments, STATUS_CHECK_INTERVAL_MS } from './jobs/payment-status-checks';
+import { checkPendingRefunds } from './jobs/refund-status-checks';
 import { startJob } from './jobs/runner';
 import { fanOutAllEvents } from './jobs/webhook-fan-out';
 import { WEBHOOK_POLL_INTERVAL_MS, sendDueWebhooks } from './jobs/webhook-sender';
@@ -39,6 +40,17 @@ const jobs = [
     run: async () => {
       // Payments younger than BANK_TIMEOUT_MS may still have a pay request waiting on the bank.
       await checkPendingPayments(paymentDeps, logger.child({ job: 'payment-status-checks' }), {
+        minAgeMs: config.BANK_TIMEOUT_MS,
+      });
+    },
+  }),
+  startJob({
+    name: 'refund-status-checks',
+    intervalMs: STATUS_CHECK_INTERVAL_MS,
+    logger,
+    run: async () => {
+      // Likewise for refunds whose request may still be waiting on the bank.
+      await checkPendingRefunds(paymentDeps, logger.child({ job: 'refund-status-checks' }), {
         minAgeMs: config.BANK_TIMEOUT_MS,
       });
     },

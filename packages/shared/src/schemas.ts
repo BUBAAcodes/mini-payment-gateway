@@ -70,6 +70,16 @@ export const payOrderSchema = z.discriminatedUnion('method', [
 
 export type PayOrderInput = z.infer<typeof payOrderSchema>;
 
+/**
+ * POST /v1/payments/:id/refunds. Without an amount, the refund is for whatever is left. Any whole
+ * number of paise is allowed: the ₹1 minimum is for orders, not partial refunds.
+ */
+export const createRefundSchema = z.strictObject({
+  amount: z.number().int().min(1).max(MAX_AMOUNT).optional(),
+});
+
+export type CreateRefundInput = z.infer<typeof createRefundSchema>;
+
 /** POST /checkout/payments/:id/otp. Any short code goes to the bank, which says if it's right. */
 export const submitOtpSchema = z.strictObject({
   otp: z.string().min(1).max(12),

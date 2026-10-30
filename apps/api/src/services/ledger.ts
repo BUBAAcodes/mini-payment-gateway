@@ -4,6 +4,7 @@ import type {
   LedgerTransactionType,
   Payment,
   Prisma,
+  Refund,
 } from '@gateway/db';
 import { newId } from '@gateway/shared';
 
@@ -128,6 +129,32 @@ export function postCapture(
     tx,
     { type: 'capture', referenceType: 'payment', referenceId: payment.id },
     entries,
+  );
+}
+
+/**
+ * A processed refund's entries (section 9.4). The merchant gives back the whole refunded amount
+ * and the money leaves clearing for the customer. Our fee is not returned (decision 0001), so a
+ * full refund leaves the merchant owing us the fee: its balance can go negative.
+ */
+export function postRefund(
+  tx: Prisma.TransactionClient,
+  refund: Refund,
+): Promise<LedgerTransaction> {
+  if (refund.status !== 'processed') {
+    throw new Error(`Refund ${refund.id} must be processed before it is posted`);
+  }
+  return postLedgerTransaction(
+    tx,
+    { type: 'refund', referenceType: 'refund', referenceId: refund.id },
+    [
+      {
+        account: merchantBalanceAccount(refund.merchantId),
+        direction: 'debit',
+        amount: refund.amount,
+      },
+      { account: 'gateway_clearing', direction: 'credit', amount: refund.amount },
+    ],
   );
 }
 

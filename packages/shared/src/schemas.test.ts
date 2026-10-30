@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   amountSchema,
   createOrderSchema,
+  createRefundSchema,
   createWebhookEndpointSchema,
   currencySchema,
   idSchema,
@@ -175,6 +176,29 @@ describe('payOrderSchema', () => {
     expect(payOrderSchema.safeParse({ method: 'upi', vpa: 'a@b', amount: 1 }).success).toBe(false);
     const { name: _, ...noName } = card;
     expect(payOrderSchema.safeParse({ method: 'card', card: noName }).success).toBe(false);
+  });
+});
+
+describe('createRefundSchema', () => {
+  it('takes an optional amount: without one, the refund is for what is left', () => {
+    expect(createRefundSchema.parse({})).toEqual({});
+    expect(createRefundSchema.parse({ amount: 20_000 })).toEqual({ amount: 20_000 });
+  });
+
+  // Refunds have no ₹1 minimum: a partial refund can be any whole number of paise.
+  it('accepts a single paisa', () => {
+    expect(createRefundSchema.parse({ amount: 1 })).toEqual({ amount: 1 });
+  });
+
+  it.each([
+    ['zero', { amount: 0 }],
+    ['a negative amount', { amount: -100 }],
+    ['a float', { amount: 100.5 }],
+    ['a string', { amount: '20000' }],
+    ['more than any order can be', { amount: 50_000_001 }],
+    ['an unknown field', { amount: 100, reason: 'damaged' }],
+  ])('rejects %s', (_name, body) => {
+    expect(createRefundSchema.safeParse(body).success).toBe(false);
   });
 });
 

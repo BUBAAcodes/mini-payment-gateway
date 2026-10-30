@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { PrismaClient } from '@gateway/db';
@@ -139,7 +140,7 @@ describe('getMerchantBalance', () => {
   });
 });
 
-// ---------- A random mix of payments (step 11, "done when") ----------
+// ---------- A random mix of payments and refunds (steps 11 and 16, spec section 15) ----------
 
 type Outcome =
   'upi_success' | 'upi_fail' | 'upi_slow' | 'card_approved' | 'card_wrong_otp' | 'card_declined';
@@ -167,9 +168,17 @@ const EDGE_AMOUNTS = [MIN_AMOUNT, 124, 125, 175, MAX_AMOUNT];
 const APPROVED_CARD = '4111111111111111';
 const DECLINED_CARD = '4000000000000002';
 
+/** What happens to a payment once captured: partial refunds are for `refundPart` paise. */
+type RefundPlan = 'none' | 'partial' | 'full' | 'partial_then_rest';
+
+const REFUND_PLANS: RefundPlan[] = ['none', 'partial', 'full', 'partial_then_rest'];
+
 interface PlannedPayment {
   amount: number;
   outcome: Outcome;
+  refund: RefundPlan;
+  /** Between 1 and amount - 1 paise. */
+  refundPart: number;
 }
 
 /** mulberry32: a tiny seeded PRNG, so a failing mix can be replayed with the same seed. */
@@ -185,8 +194,8 @@ function seededRandom(seed: number): () => number {
 }
 
 /**
- * Every outcome once, every edge amount captured once, then 20 random payments, shuffled.
- * Run with LEDGER_MIX_SEED=<seed> to replay a failure.
+ * Every outcome once, every edge amount captured once (taking each refund plan in turn), then 20
+ * random payments, shuffled. Run with LEDGER_MIX_SEED=<seed> to replay a failure.
  */
 function planPayments(seed: number): PlannedPayment[] {
   const random = seededRandom(seed);
@@ -195,11 +204,19 @@ function planPayments(seed: number): PlannedPayment[] {
     random() < 0.3
       ? pick(EDGE_AMOUNTS)
       : MIN_AMOUNT + Math.floor(random() * (MAX_AMOUNT - MIN_AMOUNT + 1));
+  const planned = (amount: number, outcome: Outcome, refund = pick(REFUND_PLANS)) => ({
+    amount,
+    outcome,
+    refund,
+    refundPart: 1 + Math.floor(random() * (amount - 1)),
+  });
 
   const plan: PlannedPayment[] = [
-    ...OUTCOMES.map((outcome) => ({ amount: randomAmount(), outcome })),
-    ...EDGE_AMOUNTS.map((amount) => ({ amount, outcome: 'upi_success' as const })),
-    ...Array.from({ length: 20 }, () => ({ amount: randomAmount(), outcome: pick(OUTCOMES) })),
+    ...OUTCOMES.map((outcome) => planned(randomAmount(), outcome)),
+    ...EDGE_AMOUNTS.map((amount, i) =>
+      planned(amount, 'upi_success', REFUND_PLANS[i % REFUND_PLANS.length]),
+    ),
+    ...Array.from({ length: 20 }, () => planned(randomAmount(), pick(OUTCOMES))),
   ];
   for (let i = plan.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
@@ -266,12 +283,48 @@ async function resolveSlowPayment(paymentId: string) {
   }
 }
 
+/**
+ * Refunds a captured payment as planned, through the merchant API. Returns the refunds' IDs and
+ * what they add up to, checking each amount against the plan as it goes.
+ */
+async function makeRefunds(
+  apiKey: string,
+  payment: PlannedPayment & { id: string },
+): Promise<{ ids: string[]; total: number }> {
+  // undefined: no amount in the request, so the refund is for whatever is left.
+  const requests: { amount?: number; expected: number }[] = {
+    none: [],
+    partial: [{ amount: payment.refundPart, expected: payment.refundPart }],
+    full: [{ expected: payment.amount }],
+    partial_then_rest: [
+      { amount: payment.refundPart, expected: payment.refundPart },
+      { expected: payment.amount - payment.refundPart },
+    ],
+  }[payment.refund];
+
+  const ids: string[] = [];
+  for (const { amount, expected } of requests) {
+    const res = await request(app)
+      .post(`/v1/payments/${payment.id}/refunds`)
+      .set('Authorization', `Bearer ${apiKey}`)
+      .set('Idempotency-Key', randomUUID())
+      .send(amount === undefined ? {} : { amount });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(res.body).toMatchObject({ amount: expected, status: 'processed' });
+    ids.push(res.body.id);
+  }
+  return { ids, total: sum(requests.map((r) => r.expected)) };
+}
+
+const fullyRefunded = (p: PlannedPayment) =>
+  p.refund === 'full' || p.refund === 'partial_then_rest';
+
 const sum = (values: number[]) => values.reduce((total, v) => total + v, 0);
 
 const seed = Number(process.env.LEDGER_MIX_SEED ?? Math.floor(Math.random() * 2 ** 32));
 
-describe('a random mix of payments', () => {
-  it(`balances every ledger transaction and owes the merchant its net captures (seed ${seed})`, async () => {
+describe('a random mix of payments and refunds', () => {
+  it(`balances every ledger transaction and owes the merchant net captures less refunds (seed ${seed})`, async () => {
     const { merchant, apiKey } = await merchantWithKey(db);
     const plan = planPayments(seed);
 
@@ -285,16 +338,33 @@ describe('a random mix of payments', () => {
     const fees = captured.map((p) => calculateFee(p.amount, testConfig.FEE_BPS));
     expect(captured.length).toBeGreaterThanOrEqual(EDGE_AMOUNTS.length + 2);
 
+    const refundIds: string[] = [];
+    let refundedTotal = 0;
+    for (const p of captured) {
+      const { ids, total } = await makeRefunds(apiKey.key, p);
+      refundIds.push(...ids);
+      refundedTotal += total;
+    }
+    expect(refundIds.length).toBeGreaterThanOrEqual(4);
+
     const payments = await db.payment.findMany({ where: { id: { in: made.map((p) => p.id) } } });
     const statusOf = new Map(payments.map((p) => [p.id, p.status]));
     for (const p of made) {
-      expect(statusOf.get(p.id), `${p.outcome} ${p.id}`).toBe(
-        CAPTURED.includes(p.outcome) ? 'captured' : 'failed',
-      );
+      const expected = !CAPTURED.includes(p.outcome)
+        ? 'failed'
+        : fullyRefunded(p)
+          ? 'refunded'
+          : 'captured';
+      expect(statusOf.get(p.id), `${p.outcome} ${p.refund} ${p.id}`).toBe(expected);
     }
 
     const transactions = await db.ledgerTransaction.findMany({
-      where: { referenceType: 'payment', referenceId: { in: made.map((p) => p.id) } },
+      where: {
+        OR: [
+          { referenceType: 'payment', referenceId: { in: made.map((p) => p.id) } },
+          { referenceType: 'refund', referenceId: { in: refundIds } },
+        ],
+      },
       include: { entries: { include: { account: true } } },
     });
 
@@ -305,13 +375,20 @@ describe('a random mix of payments', () => {
       expect(debits, `ledger transaction ${t.id}`).toBe(credits);
     }
 
-    // One capture transaction per captured payment, none for failed ones.
-    expect(transactions.every((t) => t.type === 'capture')).toBe(true);
-    expect(transactions.map((t) => t.referenceId).sort()).toEqual(captured.map((p) => p.id).sort());
+    // One capture transaction per captured payment, none for failed ones, one per refund.
+    const referencesOf = (type: string) =>
+      transactions
+        .filter((t) => t.type === type)
+        .map((t) => t.referenceId)
+        .sort();
+    expect(referencesOf('capture')).toEqual(captured.map((p) => p.id).sort());
+    expect(referencesOf('refund')).toEqual([...refundIds].sort());
+    expect(transactions).toHaveLength(captured.length + refundIds.length);
 
-    // The merchant is owed exactly its net captures; the gateway holds the gross and keeps the fees.
+    // The merchant is owed its net captures less what it refunded (fees are not given back); the
+    // gateway took in the gross, paid out the refunds and keeps the fees.
     const netCaptures = sum(captured.map((p, i) => p.amount - fees[i]!));
-    expect(await getMerchantBalance(db, merchant.id)).toBe(netCaptures);
+    expect(await getMerchantBalance(db, merchant.id)).toBe(netCaptures - refundedTotal);
 
     const entries = transactions.flatMap((t) => t.entries);
     const total = (account: string, direction: 'debit' | 'credit') =>
@@ -321,6 +398,7 @@ describe('a random mix of payments', () => {
           .map((e) => e.amount),
       );
     expect(total('gateway_clearing', 'debit')).toBe(sum(captured.map((p) => p.amount)));
+    expect(total('gateway_clearing', 'credit')).toBe(refundedTotal);
     expect(total('fee_revenue', 'credit')).toBe(sum(fees));
   });
 
