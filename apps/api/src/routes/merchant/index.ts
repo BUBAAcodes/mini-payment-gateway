@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { PrismaClient } from '@gateway/db';
 import type { AppConfig } from '../../config';
 import { requireApiKey } from '../../middleware/auth';
+import { eventsRouter } from './events';
 import { ordersRouter } from './orders';
 import { paymentsRouter } from './payments';
 import { webhookEndpointsRouter } from './webhook-endpoints';
@@ -13,5 +14,6 @@ export function merchantRouter(db: PrismaClient, config: AppConfig): Router {
   router.use(ordersRouter(db, config));
   router.use(paymentsRouter(db));
   router.use(webhookEndpointsRouter(db, config));
+  router.use(eventsRouter(db, config));
   return router;
 }

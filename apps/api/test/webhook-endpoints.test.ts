@@ -1,6 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { createServer, type IncomingHttpHeaders, type Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { PrismaClient } from '@gateway/db';
@@ -8,6 +6,7 @@ import { testPrisma } from '@gateway/db/testing';
 import { newId, verifyWebhook } from '@gateway/shared';
 import { attemptDelivery } from '../src/services/webhook-delivery';
 import { merchantWithKey, testApp, testConfig } from './helpers';
+import { startReceiver, stopReceivers } from './receiver';
 
 let db: PrismaClient;
 let app: ReturnType<typeof testApp>;
@@ -28,43 +27,7 @@ afterAll(async () => {
   await db.$disconnect();
 });
 
-interface ReceivedWebhook {
-  headers: IncomingHttpHeaders;
-  body: string;
-}
-
-interface Receiver {
-  url: string;
-  received: ReceivedWebhook[];
-}
-
-const servers: Server[] = [];
-
-afterEach(async () => {
-  await Promise.all(
-    servers.splice(0).map((s) => new Promise((resolve) => s.close(resolve).closeAllConnections())),
-  );
-});
-
-/** A merchant's webhook receiver on 127.0.0.1 that records requests and answers with `status`. */
-async function startReceiver(
-  status = 200,
-  extraHeaders: Record<string, string> = {},
-): Promise<Receiver> {
-  const received: ReceivedWebhook[] = [];
-  const server = createServer((req, res) => {
-    const chunks: Buffer[] = [];
-    req.on('data', (chunk: Buffer) => chunks.push(chunk));
-    req.on('end', () => {
-      received.push({ headers: req.headers, body: Buffer.concat(chunks).toString('utf8') });
-      res.writeHead(status, extraHeaders).end('ok');
-    });
-  });
-  servers.push(server);
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const { port } = server.address() as AddressInfo;
-  return { url: `http://127.0.0.1:${port}/webhooks`, received };
-}
+afterEach(stopReceivers);
 
 function as(key: string) {
   return { Authorization: `Bearer ${key}` };
@@ -279,7 +242,7 @@ describe('DELETE /v1/webhook_endpoints/:id', () => {
 
 describe('POST /v1/webhook_endpoints/:id/test', () => {
   it('delivers a signed ping event to the endpoint', async () => {
-    const receiver = await startReceiver(200);
+    const receiver = await startReceiver();
     const endpoint = await newEndpoint(receiver.url);
 
     const res = await sendTest(endpoint.id);
@@ -325,7 +288,7 @@ describe('POST /v1/webhook_endpoints/:id/test', () => {
   ])(
     'records %s as a failed attempt and leaves the delivery pending',
     async (_name, status, headers) => {
-      const receiver = await startReceiver(status, headers);
+      const receiver = await startReceiver({ statuses: [status], headers });
       const endpoint = await newEndpoint(receiver.url);
 
       const res = await sendTest(endpoint.id);
@@ -361,7 +324,7 @@ describe('POST /v1/webhook_endpoints/:id/test', () => {
   it('records an unreachable endpoint as a failed attempt', async () => {
     const receiver = await startReceiver();
     const endpoint = await newEndpoint(receiver.url);
-    await new Promise((resolve) => servers.pop()!.close(resolve));
+    await receiver.close();
 
     const res = await sendTest(endpoint.id);
     expect(res.body).toMatchObject({
@@ -383,13 +346,8 @@ describe('POST /v1/webhook_endpoints/:id/test', () => {
 
 describe('attemptDelivery', () => {
   it('gives up on a receiver that takes longer than the timeout', async () => {
-    const server = createServer(() => {
-      // Never answers.
-    });
-    servers.push(server);
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    const { port } = server.address() as AddressInfo;
-    const endpoint = await newEndpoint(`http://127.0.0.1:${port}/slow`);
+    const receiver = await startReceiver({ hang: true });
+    const endpoint = await newEndpoint(receiver.url);
     const event = await db.event.create({
       data: {
         id: newId('evt'),

@@ -1,8 +1,9 @@
 import http from 'node:http';
 import https from 'node:https';
-import type { Event, PrismaClient, WebhookDelivery } from '@gateway/db';
+import type { Event, Prisma, PrismaClient, WebhookDelivery } from '@gateway/db';
 import { decryptSecret, webhookHeaders } from '@gateway/shared';
 import { checkWebhookUrl, guardedLookup } from './ssrf';
+import { retryDelayMs } from './webhook-retry';
 
 /** A webhook succeeds only with a 2xx answer inside this window (spec section 11). */
 export const WEBHOOK_TIMEOUT_MS = 15_000;
@@ -15,6 +16,10 @@ export interface DeliveryOptions {
   /** ALLOW_PRIVATE_WEBHOOK_URLS. */
   allowPrivate: boolean;
   timeoutMs?: number;
+  /** The clock attempts are stamped and retries scheduled with. Tests pass their own. */
+  now?: () => Date;
+  /** Picks the retry jitter: a number in [0, 1]. */
+  random?: () => number;
 }
 
 /** The body every webhook carries: { id, type, created_at, data: { object } }. */
@@ -72,15 +77,35 @@ function describeError(err: unknown): string {
 }
 
 /**
- * Makes one signed attempt at a delivery and records the outcome. A 2xx marks it `succeeded`;
- * anything else leaves it `pending` with the error recorded (step 14 adds the retry schedule and
- * the final `failed`). The caller must hold the delivery's lease, and must not be inside a
+ * Records how an attempt ended, unless the delivery is no longer `pending`. A sender whose lease
+ * ran out mid-send may finish after another sender already settled the delivery; its late result
+ * must not turn `succeeded` back into `pending`.
+ */
+async function recordAttempt(
+  db: PrismaClient,
+  deliveryId: string,
+  data: Prisma.WebhookDeliveryUpdateManyMutationInput,
+): Promise<WebhookDelivery> {
+  await db.webhookDelivery.updateMany({ where: { id: deliveryId, status: 'pending' }, data });
+  return db.webhookDelivery.findUniqueOrThrow({ where: { id: deliveryId } });
+}
+
+/**
+ * Makes one signed attempt at a delivery and records the outcome. A 2xx marks it `succeeded`.
+ * Anything else schedules the next attempt from the retry schedule, or marks the delivery `failed`
+ * when no retries are left. The caller must hold the delivery's lease, and must not be inside a
  * transaction: this waits on the merchant's server (rule 11).
  */
 export async function attemptDelivery(
   db: PrismaClient,
   deliveryId: string,
-  { encryptionKey, allowPrivate, timeoutMs = WEBHOOK_TIMEOUT_MS }: DeliveryOptions,
+  {
+    encryptionKey,
+    allowPrivate,
+    timeoutMs = WEBHOOK_TIMEOUT_MS,
+    now = () => new Date(),
+    random = Math.random,
+  }: DeliveryOptions,
 ): Promise<WebhookDelivery> {
   const delivery = await db.webhookDelivery.findUniqueOrThrow({
     where: { id: deliveryId },
@@ -89,13 +114,15 @@ export async function attemptDelivery(
   const { event, endpoint } = delivery;
 
   if (endpoint.deletedAt) {
-    return db.webhookDelivery.update({
-      where: { id: deliveryId },
-      data: { status: 'failed', lastError: 'Webhook endpoint was deleted', lockedUntil: null },
+    return recordAttempt(db, deliveryId, {
+      status: 'failed',
+      lastError: 'Webhook endpoint was deleted',
+      lockedUntil: null,
     });
   }
 
-  const startedAt = new Date();
+  const startedAt = now();
+  const startedMs = performance.now();
   let statusCode: number | null = null;
   let error: string | null = null;
   try {
@@ -120,17 +147,26 @@ export async function attemptDelivery(
     error = describeError(err);
   }
 
-  return db.webhookDelivery.update({
-    where: { id: deliveryId },
-    data: {
-      status: error === null ? 'succeeded' : 'pending',
-      attemptCount: { increment: 1 },
-      lastAttemptAt: startedAt,
-      lastResponseStatus: statusCode,
-      lastResponseMs: statusCode === null ? null : Date.now() - startedAt.getTime(),
-      lastError: error,
-      lockedUntil: null,
-    },
+  let outcome: Prisma.WebhookDeliveryUpdateManyMutationInput;
+  if (error === null) {
+    outcome = { status: 'succeeded' };
+  } else {
+    // The schedule counts from when the attempt ended.
+    const retryIn = retryDelayMs(delivery.attemptCount + 1, random);
+    outcome =
+      retryIn === null
+        ? { status: 'failed' }
+        : { nextAttemptAt: new Date(now().getTime() + retryIn) };
+  }
+
+  return recordAttempt(db, deliveryId, {
+    ...outcome,
+    attemptCount: { increment: 1 },
+    lastAttemptAt: startedAt,
+    lastResponseStatus: statusCode,
+    lastResponseMs: statusCode === null ? null : Math.round(performance.now() - startedMs),
+    lastError: error,
+    lockedUntil: null,
   });
 }
 
@@ -142,6 +178,8 @@ export function webhookDeliveryResource(d: WebhookDelivery) {
     endpoint_id: d.endpointId,
     status: d.status,
     attempt_count: d.attemptCount,
+    // When the sender will try again. Only a pending delivery has one.
+    next_attempt_at: d.status === 'pending' ? d.nextAttemptAt.toISOString() : null,
     last_attempt_at: d.lastAttemptAt?.toISOString() ?? null,
     last_response_status: d.lastResponseStatus,
     last_response_ms: d.lastResponseMs,

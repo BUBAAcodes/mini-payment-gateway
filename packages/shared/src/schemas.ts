@@ -102,3 +102,13 @@ export const createWebhookEndpointSchema = z.strictObject({
 });
 
 export type CreateWebhookEndpointInput = z.infer<typeof createWebhookEndpointSchema>;
+
+/**
+ * POST /v1/events/:id/redeliver. Without endpoint_id, the event goes again to every live endpoint
+ * that got it before.
+ */
+export const redeliverEventSchema = z.strictObject({
+  endpoint_id: idSchema('we').optional(),
+});
+
+export type RedeliverEventInput = z.infer<typeof redeliverEventSchema>;

@@ -9,6 +9,7 @@ import {
   type CreateWebhookEndpointInput,
 } from '@gateway/shared';
 import { recordEvent } from './events';
+import { olderThan, toPage, type Page } from './pagination';
 import { assertWebhookUrlAllowed } from './ssrf';
 import { DELIVERY_LEASE_MS, attemptDelivery } from './webhook-delivery';
 
@@ -26,8 +27,13 @@ export interface CreatedWebhookEndpoint {
 }
 
 /** Live endpoints of one merchant. Deleted ones keep their delivery history but are invisible. */
-function liveEndpoints(merchantId: string): Prisma.WebhookEndpointWhereInput {
+export function liveEndpoints(merchantId: string): Prisma.WebhookEndpointWhereInput {
   return { merchantId, deletedAt: null };
+}
+
+/** True if an endpoint with these event_types wants events of this type. */
+export function isSubscribed(eventTypes: string[], type: string): boolean {
+  return eventTypes.includes('*') || eventTypes.includes(type);
 }
 
 export async function createWebhookEndpoint(
@@ -50,11 +56,6 @@ export async function createWebhookEndpoint(
   return { endpoint, secret };
 }
 
-export interface Page<T> {
-  data: T[];
-  has_more: boolean;
-}
-
 /** Newest first. `startingAfter` is the last ID of the previous page. */
 export async function listWebhookEndpoints(
   db: PrismaClient,
@@ -68,12 +69,7 @@ export async function listWebhookEndpoints(
       ? await db.webhookEndpoint.findFirst({ where: { id: startingAfter, merchantId } })
       : null;
     if (!cursor) throw new ValidationError('No such webhook endpoint', 'starting_after');
-    after = {
-      OR: [
-        { createdAt: { lt: cursor.createdAt } },
-        { createdAt: cursor.createdAt, id: { lt: cursor.id } },
-      ],
-    };
+    after = olderThan(cursor);
   }
 
   const rows = await db.webhookEndpoint.findMany({
@@ -81,7 +77,7 @@ export async function listWebhookEndpoints(
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
   });
-  return { data: rows.slice(0, limit), has_more: rows.length > limit };
+  return toPage(rows, limit);
 }
 
 /** Another merchant's endpoint, or a deleted one, is "not found". */

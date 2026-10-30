@@ -4,6 +4,8 @@ import { loadConfig } from './config';
 import { createFakeBank } from './fake-bank';
 import { checkPendingPayments, STATUS_CHECK_INTERVAL_MS } from './jobs/payment-status-checks';
 import { startJob } from './jobs/runner';
+import { fanOutAllEvents } from './jobs/webhook-fan-out';
+import { WEBHOOK_POLL_INTERVAL_MS, sendDueWebhooks } from './jobs/webhook-sender';
 import { createLogger } from './logger';
 
 const config = loadConfig();
@@ -38,6 +40,25 @@ const jobs = [
       // Payments younger than BANK_TIMEOUT_MS may still have a pay request waiting on the bank.
       await checkPendingPayments(paymentDeps, logger.child({ job: 'payment-status-checks' }), {
         minAgeMs: config.BANK_TIMEOUT_MS,
+      });
+    },
+  }),
+  startJob({
+    name: 'webhook-fan-out',
+    intervalMs: WEBHOOK_POLL_INTERVAL_MS,
+    logger,
+    run: async () => {
+      await fanOutAllEvents(prisma, logger.child({ job: 'webhook-fan-out' }));
+    },
+  }),
+  startJob({
+    name: 'webhook-sender',
+    intervalMs: WEBHOOK_POLL_INTERVAL_MS,
+    logger,
+    run: async () => {
+      await sendDueWebhooks(prisma, logger.child({ job: 'webhook-sender' }), {
+        encryptionKey: config.APP_ENCRYPTION_KEY,
+        allowPrivate: config.ALLOW_PRIVATE_WEBHOOK_URLS,
       });
     },
   }),

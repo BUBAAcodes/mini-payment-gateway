@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+import pg from 'pg';
 import { inject } from 'vitest';
 import { newId } from '@gateway/shared';
 import { createPrismaClient } from '../client';
@@ -10,6 +12,25 @@ import type {} from './global-setup';
 /** A client for the test container. Every test file shares the database, so use fresh IDs. */
 export function testPrisma(): PrismaClient {
   return createPrismaClient(inject('databaseUrl'));
+}
+
+/**
+ * A client for a fresh database of the test file's own, cloned from the migrated template. For
+ * code that works across every merchant, such as the webhook worker claiming all due deliveries:
+ * on the shared database it would take rows from test files running alongside it.
+ */
+export async function isolatedTestPrisma(): Promise<PrismaClient> {
+  const url = new URL(inject('databaseUrl'));
+  const name = `test_${randomBytes(6).toString('hex')}`;
+  const admin = new pg.Client({ connectionString: url.toString() });
+  await admin.connect();
+  try {
+    await admin.query(`CREATE DATABASE ${name} TEMPLATE ${inject('templateDatabase')}`);
+  } finally {
+    await admin.end();
+  }
+  url.pathname = `/${name}`;
+  return createPrismaClient(url.toString());
 }
 
 /** A merchant and its merchant_balance:{id} ledger account, created together as the seed does. */

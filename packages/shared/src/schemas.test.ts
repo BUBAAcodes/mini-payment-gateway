@@ -7,6 +7,7 @@ import {
   idSchema,
   paginationSchema,
   payOrderSchema,
+  redeliverEventSchema,
   submitOtpSchema,
 } from './schemas';
 import { newId } from './ids';
@@ -213,5 +214,22 @@ describe('createWebhookEndpointSchema', () => {
     ['an unknown field', { url, enabled: false }],
   ])('rejects %s', (_name, body) => {
     expect(createWebhookEndpointSchema.safeParse(body).success).toBe(false);
+  });
+});
+
+describe('redeliverEventSchema', () => {
+  it('takes an optional webhook endpoint ID', () => {
+    const endpointId = newId('we');
+    expect(redeliverEventSchema.parse({})).toEqual({});
+    expect(redeliverEventSchema.parse({ endpoint_id: endpointId })).toEqual({
+      endpoint_id: endpointId,
+    });
+  });
+
+  it.each([
+    ['another kind of ID', { endpoint_id: newId('evt') }],
+    ['an unknown field', { endpoint: newId('we') }],
+  ])('rejects %s', (_name, body) => {
+    expect(redeliverEventSchema.safeParse(body).success).toBe(false);
   });
 });

@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { PrismaClient } from '@gateway/db';
-import { createOrder, createPayment, testPrisma } from '@gateway/db/testing';
+import { createOrder, createPayment, isolatedTestPrisma } from '@gateway/db/testing';
 import { createFakeBank } from '../src/fake-bank';
 import { checkPendingPayments, claimPendingPayments } from '../src/jobs/payment-status-checks';
 import { createLogger } from '../src/logger';
@@ -20,7 +20,9 @@ let merchant: Awaited<ReturnType<typeof merchantWithKey>>;
 let clock: Date;
 
 beforeAll(async () => {
-  db = testPrisma();
+  // A database of this file's own: the job claims every pending payment, including ones other
+  // test files are in the middle of paying.
+  db = await isolatedTestPrisma();
   const bank = createFakeBank(db, { normalDelayMs: 0, slowDelayMs: SLOW_MS, now: () => clock });
   deps = { db, bank, feeBps: testConfig.FEE_BPS, bankTimeoutMs: testConfig.BANK_TIMEOUT_MS };
   app = testApp(db, { bank });
