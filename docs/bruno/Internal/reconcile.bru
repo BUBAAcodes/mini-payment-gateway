@@ -1,0 +1,23 @@
+meta {
+  name: Reconcile
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/internal/reconcile
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{cronSecret}}
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Add `"bank_date": "2026-10-29"` to reconcile one day (India time). Without it, catches up through yesterday.
+}

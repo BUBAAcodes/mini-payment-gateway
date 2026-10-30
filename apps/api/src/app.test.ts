@@ -7,6 +7,7 @@ import type { Logger } from 'pino';
 import { createApp } from './app';
 import { createFakeBank } from './fake-bank';
 import { createLogger } from './logger';
+import { createMemoryStore } from './middleware/rate-limit';
 
 const dbUp = async () => {};
 const dbDown = async () => {
@@ -21,6 +22,7 @@ function testApp(checkDb = dbUp, logger?: Logger) {
     db,
     checkDb,
     bank: createFakeBank(db, { slowDelayMs: 0 }),
+    rateLimit: { store: createMemoryStore() },
     logger,
     config: {
       WEB_BASE_URL: 'https://web.test',
@@ -30,6 +32,7 @@ function testApp(checkDb = dbUp, logger?: Logger) {
       ALLOW_PRIVATE_WEBHOOK_URLS: false,
       INTERNAL_CRON_SECRET: randomBytes(32).toString('hex'),
       SETTLEMENT_DELAY_DAYS: 0,
+      RATE_LIMIT_PER_MINUTE: 100,
     },
     // Extra routes that only exist in tests, to exercise the error handler.
     extraRoutes: (router) => {

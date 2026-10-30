@@ -9,15 +9,18 @@ import { createLogger, redactCheckoutSecret } from './logger';
 import { errorHandler, notFoundHandler } from './middleware/errors';
 import { assignRequestId } from './middleware/request-id';
 import { checkoutRouter } from './routes/checkout';
+import { docsRouter } from './routes/docs';
 import { healthRouter, type CheckDb } from './routes/health';
 import { internalRouter } from './routes/internal';
-import { merchantRouter } from './routes/merchant';
+import { merchantRouter, type RateLimitDeps } from './routes/merchant';
 
 export interface AppDeps {
   db: PrismaClient;
   bank: BankClient;
   checkDb: CheckDb;
   config: AppConfig;
+  /** Counts merchant API requests per key: Redis in production, createMemoryStore() in tests. */
+  rateLimit: RateLimitDeps;
   logger?: Logger;
   /** Mounts more routes before the 404 handler. Tests use it to exercise middleware. */
   extraRoutes?: (router: Router) => void;
@@ -31,6 +34,7 @@ export function createApp({
   bank,
   checkDb,
   config,
+  rateLimit,
   logger = defaultLogger(),
   extraRoutes,
 }: AppDeps): Express {
@@ -44,7 +48,8 @@ export function createApp({
   app.use(express.json({ limit: '100kb' }));
 
   app.use(healthRouter(checkDb));
-  app.use('/v1', merchantRouter({ db, bank, config }));
+  app.use(docsRouter());
+  app.use('/v1', merchantRouter({ db, bank, config, rateLimit }));
   app.use(
     '/checkout',
     checkoutRouter({

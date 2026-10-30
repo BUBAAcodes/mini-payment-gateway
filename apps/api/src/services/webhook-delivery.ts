@@ -1,7 +1,7 @@
 import http from 'node:http';
 import https from 'node:https';
 import type { Event, Prisma, PrismaClient, WebhookDelivery } from '@gateway/db';
-import { decryptSecret, webhookHeaders } from '@gateway/shared';
+import { decryptSecret, webhookHeaders, type WebhookDeliveryResponse } from '@gateway/shared';
 import { checkWebhookUrl, guardedLookup } from './ssrf';
 import { retryDelayMs } from './webhook-retry';
 
@@ -171,7 +171,7 @@ export async function attemptDelivery(
 }
 
 /** The public JSON shape of a delivery attempt record. */
-export function webhookDeliveryResource(d: WebhookDelivery) {
+export function webhookDeliveryResource(d: WebhookDelivery): WebhookDeliveryResponse {
   return {
     id: d.id,
     event_id: d.eventId,

@@ -1,0 +1,15 @@
+meta {
+  name: Get order to pay
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/checkout/orders/{{orderId}}?cs={{clientSecret}}
+  body: none
+  auth: none
+}
+
+params:query {
+  cs: {{clientSecret}}
+}

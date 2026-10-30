@@ -1,9 +1,17 @@
 import type { Logger } from 'pino';
 import type { Payment, Prisma, PrismaClient } from '@gateway/db';
-import { NotFoundError, calculateFee, isId } from '@gateway/shared';
+import {
+  NotFoundError,
+  ValidationError,
+  calculateFee,
+  isId,
+  type ListPaymentsInput,
+  type PaymentResponse,
+} from '@gateway/shared';
 import type { AuthorizeRequest, BankAnswer, BankClient } from '../fake-bank';
 import { recordEvent } from './events';
 import { postCapture } from './ledger';
+import { olderThan, toPage, type Page } from './pagination';
 import { moveTo } from './payment-state';
 
 /** What it takes to move a payment through the bank. */
@@ -30,6 +38,42 @@ export async function getPayment(
     : null;
   if (!payment) throw new NotFoundError('Payment');
   return payment;
+}
+
+/**
+ * GET /v1/payments: newest first, optionally only one status and only those created in
+ * [from, to). `starting_after` is the last ID of the previous page.
+ */
+export async function listPayments(
+  db: PrismaClient,
+  merchantId: string,
+  { limit, starting_after: startingAfter, status, from, to }: ListPaymentsInput,
+): Promise<Page<Payment>> {
+  let after: Prisma.PaymentWhereInput = {};
+  if (startingAfter !== undefined) {
+    const cursor = isId('pay', startingAfter)
+      ? await db.payment.findFirst({ where: { id: startingAfter, merchantId } })
+      : null;
+    if (!cursor) throw new ValidationError('No such payment', 'starting_after');
+    after = olderThan(cursor);
+  }
+
+  const rows = await db.payment.findMany({
+    where: {
+      merchantId,
+      ...(status !== undefined && { status }),
+      ...((from !== undefined || to !== undefined) && {
+        createdAt: {
+          ...(from !== undefined && { gte: new Date(from) }),
+          ...(to !== undefined && { lt: new Date(to) }),
+        },
+      }),
+      ...after,
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+  });
+  return toPage(rows, limit);
 }
 
 /**
@@ -195,7 +239,7 @@ async function markOrderPaid(tx: Prisma.TransactionClient, orderId: string, paid
 }
 
 /** The public JSON shape of a payment. Internal columns (merchant, bank bookkeeping) stay out. */
-export function paymentResource(p: Payment) {
+export function paymentResource(p: Payment): PaymentResponse {
   return {
     id: p.id,
     order_id: p.orderId,

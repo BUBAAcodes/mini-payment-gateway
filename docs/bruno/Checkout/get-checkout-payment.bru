@@ -1,0 +1,15 @@
+meta {
+  name: Get payment attempt
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/checkout/payments/{{paymentId}}?cs={{clientSecret}}
+  body: none
+  auth: none
+}
+
+params:query {
+  cs: {{clientSecret}}
+}

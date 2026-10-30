@@ -6,6 +6,8 @@ import { createMerchant } from '@gateway/db/testing';
 import { createApp } from '../src/app';
 import type { AppConfig } from '../src/config';
 import { createFakeBank, type BankClient } from '../src/fake-bank';
+import { createMemoryStore } from '../src/middleware/rate-limit';
+import type { RateLimitDeps } from '../src/routes/merchant';
 import { createApiKey } from '../src/services/api-keys';
 
 export const testConfig: AppConfig = {
@@ -18,6 +20,8 @@ export const testConfig: AppConfig = {
   ALLOW_PRIVATE_WEBHOOK_URLS: true,
   INTERNAL_CRON_SECRET: randomBytes(32).toString('hex'),
   SETTLEMENT_DELAY_DAYS: 0,
+  // High, so no test hits the limit by accident. test/rate-limit.test.ts sets its own.
+  RATE_LIMIT_PER_MINUTE: 10_000,
 };
 
 export interface TestAppOptions {
@@ -27,15 +31,21 @@ export interface TestAppOptions {
   extraRoutes?: (router: Router) => void;
   /** Overrides testConfig. The encryption key stays shared, so apps can read each other's data. */
   config?: Partial<AppConfig>;
+  /** Defaults to an in-memory store, with a limit no test reaches by accident. */
+  rateLimit?: RateLimitDeps;
 }
 
 /** The real app wired to the test database. */
-export function testApp(db: PrismaClient, { bank, extraRoutes, config }: TestAppOptions = {}) {
+export function testApp(
+  db: PrismaClient,
+  { bank, extraRoutes, config, rateLimit }: TestAppOptions = {},
+) {
   return createApp({
     db,
     checkDb: async () => {},
     bank: bank ?? createFakeBank(db, { normalDelayMs: 0, slowDelayMs: 60_000 }),
     config: { ...testConfig, ...config },
+    rateLimit: rateLimit ?? { store: createMemoryStore() },
     extraRoutes,
   });
 }

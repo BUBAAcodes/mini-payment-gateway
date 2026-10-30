@@ -16,6 +16,22 @@ export const paginationSchema = z.object({
   starting_after: z.string().optional(),
 });
 
+/** GET /v1/payments: optional filters on status and creation time ([from, to)), plus a page. */
+export const listPaymentsSchema = paginationSchema
+  .extend({
+    status: z
+      .enum(['created', 'otp_required', 'pending', 'authorized', 'captured', 'failed', 'refunded'])
+      .optional(),
+    from: z.iso.datetime({ offset: true }).optional(),
+    to: z.iso.datetime({ offset: true }).optional(),
+  })
+  .refine((q) => !q.from || !q.to || Date.parse(q.from) < Date.parse(q.to), {
+    message: 'from must be before to',
+    path: ['to'],
+  });
+
+export type ListPaymentsInput = z.infer<typeof listPaymentsSchema>;
+
 const httpUrlSchema = z
   .url({ protocol: /^https?$/, error: 'Must be an http or https URL' })
   .max(2048);

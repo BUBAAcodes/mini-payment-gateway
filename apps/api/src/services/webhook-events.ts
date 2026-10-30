@@ -1,5 +1,12 @@
 import type { Event, Prisma, PrismaClient, WebhookDelivery } from '@gateway/db';
-import { InvalidStateError, NotFoundError, ValidationError, isId, newId } from '@gateway/shared';
+import {
+  InvalidStateError,
+  NotFoundError,
+  ValidationError,
+  isId,
+  newId,
+  type EventResponse,
+} from '@gateway/shared';
 import { olderThan, toPage, type Page } from './pagination';
 import { webhookDeliveryResource } from './webhook-delivery';
 import { getWebhookEndpoint, liveEndpoints } from './webhook-endpoints';
@@ -71,12 +78,13 @@ export async function redeliverEvent(
 }
 
 /** The public JSON shape of an event, with the status of each delivery. */
-export function eventResource(e: EventWithDeliveries) {
+export function eventResource(e: EventWithDeliveries): EventResponse {
   return {
     id: e.id,
-    type: e.type,
+    // Only recordEvent writes events, and it takes a WebhookEventType.
+    type: e.type as EventResponse['type'],
     created_at: e.createdAt.toISOString(),
-    data: e.payload,
+    data: e.payload as EventResponse['data'],
     dispatched_at: e.dispatchedAt?.toISOString() ?? null,
     deliveries: e.deliveries.map(webhookDeliveryResource),
   };

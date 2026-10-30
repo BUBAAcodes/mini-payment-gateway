@@ -6,6 +6,7 @@ import { amountSchema } from '@gateway/shared';
 import { createPrismaClient } from '@gateway/db';
 import { createApp } from '../app';
 import { createFakeBank } from '../fake-bank';
+import { createMemoryStore } from './rate-limit';
 import { validate } from './validate';
 
 // Never queried: these routes don't touch the database, and the client connects lazily.
@@ -15,6 +16,7 @@ const app = createApp({
   db,
   checkDb: async () => {},
   bank: createFakeBank(db, { slowDelayMs: 0 }),
+  rateLimit: { store: createMemoryStore() },
   config: {
     WEB_BASE_URL: 'https://web.test',
     APP_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
@@ -23,6 +25,7 @@ const app = createApp({
     ALLOW_PRIVATE_WEBHOOK_URLS: false,
     INTERNAL_CRON_SECRET: randomBytes(32).toString('hex'),
     SETTLEMENT_DELAY_DAYS: 0,
+    RATE_LIMIT_PER_MINUTE: 100,
   },
   extraRoutes: (router) => {
     router.post(

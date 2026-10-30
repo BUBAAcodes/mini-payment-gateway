@@ -6,6 +6,7 @@ import {
   isId,
   newId,
   type CreateRefundInput,
+  type RefundResponse,
 } from '@gateway/shared';
 import type { BankAnswer, BankClient } from '../fake-bank';
 import { recordEvent } from './events';
@@ -219,7 +220,7 @@ async function failRefund(
 }
 
 /** The public JSON shape of a refund. */
-export function refundResource(r: Refund) {
+export function refundResource(r: Refund): RefundResponse {
   return {
     id: r.id,
     payment_id: r.paymentId,

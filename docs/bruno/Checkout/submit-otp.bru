@@ -1,0 +1,25 @@
+meta {
+  name: Submit OTP
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/checkout/payments/{{paymentId}}/otp?cs={{clientSecret}}
+  body: json
+  auth: none
+}
+
+params:query {
+  cs: {{clientSecret}}
+}
+
+body:json {
+  {
+    "otp": "123456"
+  }
+}
+
+docs {
+  `123456` is the right OTP; anything else fails with `otp_invalid`.
+}

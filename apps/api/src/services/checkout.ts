@@ -13,6 +13,8 @@ import {
   sha256Hex,
   signCheckoutRedirect,
   type PayOrderInput,
+  type CheckoutOrderResponse,
+  type CheckoutPaymentResponse,
 } from '@gateway/shared';
 import { moveTo } from './payment-state';
 import { authorizeWithBank, type PaymentDeps } from './payments';
@@ -192,7 +194,11 @@ async function createAttempt(
 }
 
 /** What the checkout page sees of an order. */
-export function checkoutOrderResource({ order, merchantName, latestPayment }: CheckoutOrder) {
+export function checkoutOrderResource({
+  order,
+  merchantName,
+  latestPayment,
+}: CheckoutOrder): CheckoutOrderResponse {
   return {
     id: order.id,
     amount: order.amount,
@@ -204,7 +210,7 @@ export function checkoutOrderResource({ order, merchantName, latestPayment }: Ch
 }
 
 /** What the customer sees of a payment: no fee and no bank bookkeeping. */
-export function checkoutPaymentResource(p: Payment) {
+export function checkoutPaymentResource(p: Payment): CheckoutPaymentResponse {
   return {
     id: p.id,
     order_id: p.orderId,

@@ -6,6 +6,7 @@ import {
   newId,
   sha256Hex,
   type CreateOrderInput,
+  type OrderResponse,
 } from '@gateway/shared';
 
 export interface CreatedOrder {
@@ -61,14 +62,15 @@ export function checkoutUrl(webBaseUrl: string, orderId: string, clientSecret: s
 }
 
 /** The public JSON shape of an order. The client secret hash never leaves the database. */
-export function orderResource(o: Order) {
+export function orderResource(o: Order): OrderResponse {
   return {
     id: o.id,
     amount: o.amount,
     currency: o.currency,
     status: o.status,
     receipt: o.receipt,
-    notes: o.notes,
+    // Written through notesSchema: a flat object of strings, numbers and booleans.
+    notes: o.notes as OrderResponse['notes'],
     callback_url: o.callbackUrl,
     paid_at: o.paidAt?.toISOString() ?? null,
     created_at: o.createdAt.toISOString(),

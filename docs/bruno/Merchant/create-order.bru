@@ -1,0 +1,38 @@
+meta {
+  name: Create order
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/v1/orders
+  body: json
+  auth: inherit
+}
+
+headers {
+  Idempotency-Key: {{$randomUUID}}
+}
+
+body:json {
+  {
+    "amount": 50000,
+    "currency": "INR",
+    "receipt": "rcpt_1001",
+    "callback_url": "http://localhost:3001/payments/callback",
+    "notes": {
+      "product": "T-shirt"
+    }
+  }
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("orderId", res.body.id);
+    bru.setVar("clientSecret", res.body.client_secret);
+  }
+}
+
+docs {
+  Amounts are paise: 50000 is ₹500. Then pay it with **Checkout / Pay with UPI**.
+}

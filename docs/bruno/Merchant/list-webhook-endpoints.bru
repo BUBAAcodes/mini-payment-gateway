@@ -1,0 +1,15 @@
+meta {
+  name: List webhook endpoints
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/v1/webhook_endpoints?limit=10
+  body: none
+  auth: inherit
+}
+
+params:query {
+  limit: 10
+}

@@ -1,6 +1,6 @@
 import type { Logger } from 'pino';
 import type { Prisma, PrismaClient, Settlement } from '@gateway/db';
-import { ValidationError, isId, newId } from '@gateway/shared';
+import { ValidationError, isId, newId, type SettlementResponse } from '@gateway/shared';
 import { recordEvent } from './events';
 import { postPayout } from './ledger';
 import { olderThan, toPage, type Page } from './pagination';
@@ -182,7 +182,7 @@ export async function listSettlements(
 }
 
 /** The public JSON shape of a settlement. */
-export function settlementResource(s: Settlement) {
+export function settlementResource(s: Settlement): SettlementResponse {
   return {
     id: s.id,
     period_start: s.periodStart.toISOString(),

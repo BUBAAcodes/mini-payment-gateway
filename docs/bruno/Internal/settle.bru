@@ -1,0 +1,15 @@
+meta {
+  name: Settle
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/internal/settle
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{cronSecret}}
+}

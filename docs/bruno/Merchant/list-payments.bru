@@ -1,0 +1,22 @@
+meta {
+  name: List payments
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/v1/payments?limit=10
+  body: none
+  auth: inherit
+}
+
+params:query {
+  limit: 10
+  ~status: captured
+  ~from: 2026-01-01T00:00:00Z
+  ~to: 2027-01-01T00:00:00Z
+}
+
+docs {
+  Tick `status`, `from` or `to` to filter. `from` is inclusive, `to` exclusive.
+}

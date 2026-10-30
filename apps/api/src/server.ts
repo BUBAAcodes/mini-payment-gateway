@@ -8,16 +8,20 @@ import { startJob } from './jobs/runner';
 import { fanOutAllEvents } from './jobs/webhook-fan-out';
 import { WEBHOOK_POLL_INTERVAL_MS, sendDueWebhooks } from './jobs/webhook-sender';
 import { createLogger } from './logger';
+import { createRedisStore } from './middleware/rate-limit';
+import { createRedisClient } from './redis';
 
 const config = loadConfig();
 const logger = createLogger(config.LOG_LEVEL);
 const bank = createFakeBank(prisma, { slowDelayMs: config.BANK_SLOW_MS });
+const redis = createRedisClient(config.REDIS_URL, logger);
 
 const app = createApp({
   logger,
   db: prisma,
   bank,
   config,
+  rateLimit: { store: createRedisStore(redis) },
   checkDb: () => prisma.$queryRaw`SELECT 1`,
 });
 
@@ -81,6 +85,7 @@ function shutdown(signal: string) {
   server.close(async () => {
     await Promise.all(jobs.map((job) => job.stop()));
     await prisma.$disconnect();
+    redis.disconnect();
     process.exit(0);
   });
   // Don't hang forever on keep-alive connections.

@@ -16,6 +16,7 @@ export function requireApiKey(db: PrismaClient): RequestHandler {
     if (!identity) throw new UnauthorizedError();
 
     res.locals.merchantId = identity.merchantId;
+    res.locals.apiKeyId = identity.apiKeyId;
     req.log = req.log.child({ merchant_id: identity.merchantId, api_key_id: identity.apiKeyId });
     next();
   };

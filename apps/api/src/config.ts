@@ -6,6 +6,8 @@ const configSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65_535).default(4000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   DATABASE_URL: z.string().startsWith('postgres', 'Must be a Postgres connection URL'),
+  // Rate-limit counters. redis:// locally, rediss:// (TLS) for Upstash.
+  REDIS_URL: z.string().regex(/^rediss?:\/\//, 'Must be a redis:// or rediss:// URL'),
   // Encrypts webhook and checkout signing secrets. Checked here so a bad key stops startup,
   // instead of breaking the first webhook hours later.
   APP_ENCRYPTION_KEY: z
@@ -33,6 +35,8 @@ const configSchema = z.object({
     .min(32, 'Must be at least 32 characters'),
   // Captures and refunds settle once they are this many days old. 0 settles everything so far.
   SETTLEMENT_DELAY_DAYS: z.coerce.number().int().min(0).max(30).default(0),
+  // Requests each API key may make per minute (fixed window) before getting 429.
+  RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).default(100),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -47,6 +51,7 @@ export type AppConfig = Pick<
   | 'ALLOW_PRIVATE_WEBHOOK_URLS'
   | 'INTERNAL_CRON_SECRET'
   | 'SETTLEMENT_DELAY_DAYS'
+  | 'RATE_LIMIT_PER_MINUTE'
 >;
 
 /** Reads config from the environment. Throws on startup instead of failing later on first use. */

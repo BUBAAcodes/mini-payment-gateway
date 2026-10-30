@@ -4,6 +4,7 @@ import { loadConfig } from './config';
 
 const validEnv = {
   DATABASE_URL: 'postgresql://gateway:gateway@localhost:5432/gateway',
+  REDIS_URL: 'redis://localhost:6379',
   APP_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
   INTERNAL_CRON_SECRET: randomBytes(32).toString('hex'),
 };
@@ -92,6 +93,24 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...validEnv, INTERNAL_CRON_SECRET: 'short' })).toThrow(
       /INTERNAL_CRON_SECRET: Must be at least 32 characters/,
     );
+  });
+
+  it('needs a redis:// or rediss:// REDIS_URL', () => {
+    const { REDIS_URL: _, ...env } = validEnv;
+    expect(() => loadConfig(env)).toThrow(/REDIS_URL/);
+    expect(() => loadConfig({ ...validEnv, REDIS_URL: 'localhost:6379' })).toThrow(/REDIS_URL/);
+    const upstash = 'rediss://default:token@example.upstash.io:6379';
+    expect(loadConfig({ ...validEnv, REDIS_URL: upstash }).REDIS_URL).toBe(upstash);
+  });
+
+  it('allows 100 requests a minute per API key by default', () => {
+    expect(loadConfig(validEnv).RATE_LIMIT_PER_MINUTE).toBe(100);
+    expect(loadConfig({ ...validEnv, RATE_LIMIT_PER_MINUTE: '5' }).RATE_LIMIT_PER_MINUTE).toBe(5);
+    for (const bad of ['0', '-1', '2.5', 'lots']) {
+      expect(() => loadConfig({ ...validEnv, RATE_LIMIT_PER_MINUTE: bad })).toThrow(
+        /RATE_LIMIT_PER_MINUTE/,
+      );
+    }
   });
 
   it('settles everything so far by default, and reads SETTLEMENT_DELAY_DAYS as whole days', () => {

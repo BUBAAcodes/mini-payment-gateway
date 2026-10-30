@@ -1,0 +1,15 @@
+meta {
+  name: List settlements
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{baseUrl}}/v1/settlements?limit=10
+  body: none
+  auth: inherit
+}
+
+params:query {
+  limit: 10
+}

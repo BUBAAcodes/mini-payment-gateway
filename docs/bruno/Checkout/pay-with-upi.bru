@@ -1,0 +1,32 @@
+meta {
+  name: Pay with UPI
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/checkout/orders/{{orderId}}/pay?cs={{clientSecret}}
+  body: json
+  auth: none
+}
+
+params:query {
+  cs: {{clientSecret}}
+}
+
+body:json {
+  {
+    "method": "upi",
+    "vpa": "success@test"
+  }
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("paymentId", res.body.id);
+  }
+}
+
+docs {
+  Test UPI IDs: `success@test`, `fail@test`, `slow@test` (stays pending, then a status check finishes it), `lost@test` (the bank approves but never tells us).
+}

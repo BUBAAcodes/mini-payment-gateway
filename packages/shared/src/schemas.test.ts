@@ -6,6 +6,7 @@ import {
   createWebhookEndpointSchema,
   currencySchema,
   idSchema,
+  listPaymentsSchema,
   paginationSchema,
   payOrderSchema,
   reconcileSchema,
@@ -272,5 +273,33 @@ describe('reconcileSchema', () => {
     ['an unknown field', { date: '2026-10-29' }],
   ])('rejects %s', (_name, body) => {
     expect(reconcileSchema.safeParse(body).success).toBe(false);
+  });
+});
+
+describe('listPaymentsSchema', () => {
+  it('takes a page and optional status and time filters', () => {
+    expect(listPaymentsSchema.parse({})).toEqual({ limit: 20 });
+    expect(
+      listPaymentsSchema.parse({
+        limit: '5',
+        status: 'captured',
+        from: '2026-10-01T00:00:00Z',
+        to: '2026-10-02T00:00:00+05:30',
+      }),
+    ).toEqual({
+      limit: 5,
+      status: 'captured',
+      from: '2026-10-01T00:00:00Z',
+      to: '2026-10-02T00:00:00+05:30',
+    });
+  });
+
+  it.each([
+    ['an unknown status', { status: 'paid' }],
+    ['a date without a time', { from: '2026-10-01' }],
+    ['from after to', { from: '2026-10-02T00:00:00Z', to: '2026-10-01T00:00:00Z' }],
+    ['from equal to to', { from: '2026-10-01T00:00:00Z', to: '2026-10-01T00:00:00Z' }],
+  ])('rejects %s', (_name, query) => {
+    expect(listPaymentsSchema.safeParse(query).success).toBe(false);
   });
 });

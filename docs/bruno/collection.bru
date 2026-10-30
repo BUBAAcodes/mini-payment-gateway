@@ -1,0 +1,22 @@
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{apiKey}}
+}
+
+docs {
+  # Gateway API
+
+  Pick the **local** environment and fill in its two secrets (they are never saved in the repo):
+
+  - `apiKey`: a merchant's `sk_test_...` key. `pnpm db:seed` prints one.
+  - `cronSecret`: `INTERNAL_CRON_SECRET` from `.env`, for the Internal folder.
+
+  A payment from start to finish: **Merchant / Create order**, then **Checkout / Pay with UPI**,
+  then anything under Merchant. Each request saves the IDs the next ones need (`orderId`,
+  `clientSecret`, `paymentId`, `refundId`, `endpointId`, `eventId`).
+
+  Full reference: http://localhost:4000/docs
+}

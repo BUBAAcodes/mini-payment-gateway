@@ -7,6 +7,7 @@ import {
   isId,
   newId,
   type CreateWebhookEndpointInput,
+  type WebhookEndpointResponse,
 } from '@gateway/shared';
 import { recordEvent } from './events';
 import { olderThan, toPage, type Page } from './pagination';
@@ -145,7 +146,7 @@ export async function sendTestWebhook(
 }
 
 /** The public JSON shape of an endpoint. The secret is never part of it. */
-export function webhookEndpointResource(e: WebhookEndpoint) {
+export function webhookEndpointResource(e: WebhookEndpoint): WebhookEndpointResponse {
   return {
     id: e.id,
     url: e.url,

@@ -1,0 +1,23 @@
+meta {
+  name: Redeliver event
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/v1/events/{{eventId}}/redeliver
+  body: json
+  auth: inherit
+}
+
+headers {
+  Idempotency-Key: {{$randomUUID}}
+}
+
+body:json {
+  {}
+}
+
+docs {
+  Add `"endpoint_id"` to send it to one endpoint only.
+}

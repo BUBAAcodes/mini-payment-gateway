@@ -1,0 +1,11 @@
+meta {
+  name: Send test webhook
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/v1/webhook_endpoints/{{endpointId}}/test
+  body: none
+  auth: inherit
+}
