@@ -1,8 +1,9 @@
 import type { Logger } from 'pino';
 import type { Payment, Prisma, PrismaClient } from '@gateway/db';
-import { NotFoundError, calculateFee, isId, newId } from '@gateway/shared';
+import { NotFoundError, calculateFee, isId } from '@gateway/shared';
 import type { AuthorizeRequest, BankAnswer, BankClient } from '../fake-bank';
 import { recordEvent } from './events';
+import { postCapture } from './ledger';
 import { moveTo } from './payment-state';
 
 /** What it takes to move a payment through the bank. */
@@ -164,7 +165,7 @@ async function capturePayment(
   const authorized = await moveTo(tx, payment, 'authorized', { bankRef, authorizedAt: now });
   const captured = await moveTo(tx, authorized, 'captured', { fee, capturedAt: now });
   await markOrderPaid(tx, captured.orderId, now);
-  await postCaptureToLedger(tx, captured, fee);
+  await postCapture(tx, captured);
   await recordEvent(tx, captured.merchantId, 'payment.captured', paymentResource(captured));
   return captured;
 }
@@ -191,39 +192,6 @@ async function markOrderPaid(tx: Prisma.TransactionClient, orderId: string, paid
     data: { status: 'paid', paidAt },
   });
   if (count === 0) throw new Error(`Order ${orderId} is not waiting for a payment`);
-}
-
-/**
- * The capture's ledger entries (section 9.4). We hold the whole amount in clearing; we owe the
- * merchant the amount minus the fee, and keep the fee. Step 11 moves this into the ledger service.
- */
-async function postCaptureToLedger(tx: Prisma.TransactionClient, payment: Payment, fee: number) {
-  const merchantBalance = `merchant_balance:${payment.merchantId}`;
-  const accounts = await tx.ledgerAccount.findMany({
-    where: { code: { in: ['gateway_clearing', 'fee_revenue', merchantBalance] } },
-  });
-  const accountId = (code: string) => {
-    const account = accounts.find((a) => a.code === code);
-    if (!account) throw new Error(`Ledger account ${code} does not exist`);
-    return account.id;
-  };
-
-  const entries = [
-    { accountId: accountId('gateway_clearing'), direction: 'debit', amount: payment.amount },
-    { accountId: accountId(merchantBalance), direction: 'credit', amount: payment.amount - fee },
-    { accountId: accountId('fee_revenue'), direction: 'credit', amount: fee },
-  ] as const;
-
-  await tx.ledgerTransaction.create({
-    data: {
-      id: newId('ltx'),
-      type: 'capture',
-      referenceType: 'payment',
-      referenceId: payment.id,
-      // Entry amounts must be positive, so a zero fee (FEE_BPS=0) gets no entry.
-      entries: { create: entries.filter((e) => e.amount > 0) },
-    },
-  });
 }
 
 /** The public JSON shape of a payment. Internal columns (merchant, bank bookkeeping) stay out. */

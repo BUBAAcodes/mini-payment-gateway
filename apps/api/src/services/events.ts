@@ -1,4 +1,4 @@
-import type { Prisma } from '@gateway/db';
+import type { Event, Prisma } from '@gateway/db';
 import { newId } from '@gateway/shared';
 
 export type EventType =
@@ -19,7 +19,7 @@ export function recordEvent(
   merchantId: string,
   type: EventType,
   object: Prisma.InputJsonObject,
-) {
+): Promise<Event> {
   return tx.event.create({
     data: { id: newId('evt'), merchantId, type, payload: { object } },
   });
