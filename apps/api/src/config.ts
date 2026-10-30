@@ -33,6 +33,11 @@ const configSchema = z.object({
   INTERNAL_CRON_SECRET: z
     .string({ error: 'Required: at least 32 random characters' })
     .min(32, 'Must be at least 32 characters'),
+  // Bearer token the web app's server sends to /dashboard/*, with the logged-in merchant's ID in
+  // X-Merchant-Id. Only our own server holds it; long and random, like a password.
+  DASHBOARD_SERVICE_TOKEN: z
+    .string({ error: 'Required: at least 32 random characters' })
+    .min(32, 'Must be at least 32 characters'),
   // Captures and refunds settle once they are this many days old. 0 settles everything so far.
   SETTLEMENT_DELAY_DAYS: z.coerce.number().int().min(0).max(30).default(0),
   // Requests each API key may make per minute (fixed window) before getting 429.
@@ -50,6 +55,7 @@ export type AppConfig = Pick<
   | 'BANK_TIMEOUT_MS'
   | 'ALLOW_PRIVATE_WEBHOOK_URLS'
   | 'INTERNAL_CRON_SECRET'
+  | 'DASHBOARD_SERVICE_TOKEN'
   | 'SETTLEMENT_DELAY_DAYS'
   | 'RATE_LIMIT_PER_MINUTE'
 >;

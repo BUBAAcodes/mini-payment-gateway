@@ -1,0 +1,327 @@
+import { randomUUID } from 'node:crypto';
+import request from 'supertest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import type { PrismaClient } from '@gateway/db';
+import { createOrder, createPayment, testPrisma } from '@gateway/db/testing';
+import { newId } from '@gateway/shared';
+import { merchantWithKey, newCheckoutOrder, testApp, testConfig } from './helpers';
+
+// The dashboard API: the Next.js server calls it with DASHBOARD_SERVICE_TOKEN and the merchant ID
+// from the logged-in session. Every query is still scoped by that merchant, so merchant A's
+// session can never read or change merchant B's data.
+
+const TOKEN = testConfig.DASHBOARD_SERVICE_TOKEN;
+const UNAUTHORIZED = {
+  error: { code: 'unauthorized', message: 'Invalid or missing dashboard credentials' },
+};
+
+let db: PrismaClient;
+let app: ReturnType<typeof testApp>;
+let a: Awaited<ReturnType<typeof merchantWithKey>>;
+let b: Awaited<ReturnType<typeof merchantWithKey>>;
+
+beforeAll(() => {
+  db = testPrisma();
+  app = testApp(db);
+});
+
+afterAll(async () => {
+  await db.$disconnect();
+});
+
+beforeEach(async () => {
+  a = await merchantWithKey(db);
+  b = await merchantWithKey(db);
+});
+
+type Method = 'get' | 'post' | 'delete';
+
+/** A dashboard request as the web server sends it, for `merchantId`. */
+function asDashboard(method: Method, path: string, merchantId: string) {
+  return request(app)
+    [method](`/dashboard${path}`)
+    .set('Authorization', `Bearer ${TOKEN}`)
+    .set('X-Merchant-Id', merchantId);
+}
+
+/** Pays a new order with success@test and returns the captured payment's ID. */
+async function capturedPayment(apiKey: string): Promise<string> {
+  const order = await newCheckoutOrder(app, apiKey);
+  const res = await request(app)
+    .post(`/checkout/orders/${order.id}/pay`)
+    .query({ cs: order.cs })
+    .send({ method: 'upi', vpa: 'success@test' });
+  expect(res.body.status).toBe('captured');
+  return res.body.id;
+}
+
+function createIssue(merchantId: string, resolvedAt: Date | null = null) {
+  return db.reconciliationIssue.create({
+    data: {
+      merchantId,
+      bankDate: new Date('2026-10-29'),
+      kind: 'status_mismatch',
+      gatewayReference: newId('pay'),
+      bankRef: `bank_${randomUUID()}`,
+      details: { gateway_status: 'failed', bank_status: 'success' },
+      resolvedAt,
+    },
+  });
+}
+
+describe('dashboard authentication', () => {
+  it('answers a valid token and merchant ID', async () => {
+    const res = await asDashboard('get', '/merchant', a.merchant.id);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      id: a.merchant.id,
+      name: a.merchant.name,
+      created_at: a.merchant.createdAt.toISOString(),
+    });
+  });
+
+  it.each([
+    ['no token', {}],
+    ['a wrong token', { Authorization: `Bearer ${'x'.repeat(64)}` }],
+    ['a merchant API key instead of the token', 'apiKey'],
+    ['no X-Merchant-Id', { Authorization: `Bearer ${TOKEN}` }],
+    ['a malformed X-Merchant-Id', { Authorization: `Bearer ${TOKEN}`, 'X-Merchant-Id': 'mer_x' }],
+    ['an unknown merchant', { Authorization: `Bearer ${TOKEN}`, 'X-Merchant-Id': newId('mer') }],
+  ])('gives the same 401 for %s', async (_name, headers) => {
+    const res = await request(app)
+      .get('/dashboard/payments')
+      .set(
+        headers === 'apiKey'
+          ? { Authorization: `Bearer ${a.apiKey.key}`, 'X-Merchant-Id': a.merchant.id }
+          : headers,
+      );
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual(UNAUTHORIZED);
+  });
+
+  it('does not let the dashboard token into the merchant API', async () => {
+    const res = await request(app)
+      .get('/v1/payments')
+      .set('Authorization', `Bearer ${TOKEN}`)
+      .set('X-Merchant-Id', a.merchant.id);
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('merchant scoping', () => {
+  it("lists only the session merchant's payments and hides the other merchant's", async () => {
+    const paymentA = await createPayment(db, await createOrder(db, a.merchant.id));
+    const paymentB = await createPayment(db, await createOrder(db, b.merchant.id));
+
+    const list = await asDashboard('get', '/payments', a.merchant.id);
+    expect(list.status).toBe(200);
+    expect(list.body.data.map((p: { id: string }) => p.id)).toEqual([paymentA.id]);
+
+    const own = await asDashboard('get', `/payments/${paymentA.id}`, a.merchant.id);
+    expect(own.status).toBe(200);
+    const other = await asDashboard('get', `/payments/${paymentB.id}`, a.merchant.id);
+    expect(other.status).toBe(404);
+  });
+
+  it('shows the balance from the ledger, per merchant', async () => {
+    await capturedPayment(a.apiKey.key);
+
+    const balanceA = await asDashboard('get', '/balance', a.merchant.id);
+    const balanceB = await asDashboard('get', '/balance', b.merchant.id);
+    // ₹500 minus the 2% fee.
+    expect(balanceA.body).toEqual({ balance: 49_000, currency: 'INR' });
+    expect(balanceB.body).toEqual({ balance: 0, currency: 'INR' });
+  });
+
+  it('serves settlements, webhook endpoints and events for the merchant', async () => {
+    for (const path of ['/settlements', '/webhook_endpoints', '/events']) {
+      const res = await asDashboard('get', path, a.merchant.id);
+      expect(res.status, path).toBe(200);
+      expect(res.body, path).toEqual({ data: [], has_more: false });
+    }
+  });
+
+  it('does not expose order creation', async () => {
+    const res = await asDashboard('post', '/orders', a.merchant.id)
+      .set('Idempotency-Key', randomUUID())
+      .send({ amount: 50_000 });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('refunds from the dashboard', () => {
+  it('refunds a payment once per Idempotency-Key', async () => {
+    const paymentId = await capturedPayment(a.apiKey.key);
+    const key = randomUUID();
+    const refund = () =>
+      asDashboard('post', `/payments/${paymentId}/refunds`, a.merchant.id)
+        .set('Idempotency-Key', key)
+        .send({ amount: 10_000 });
+
+    const first = await refund();
+    const second = await refund();
+
+    expect(first.status).toBe(201);
+    expect(first.body).toMatchObject({
+      payment_id: paymentId,
+      amount: 10_000,
+      status: 'processed',
+    });
+    expect(second.headers['idempotent-replayed']).toBe('true');
+    expect(second.body.id).toBe(first.body.id);
+    expect(await db.refund.count({ where: { paymentId } })).toBe(1);
+
+    const fetched = await asDashboard('get', `/refunds/${first.body.id}`, a.merchant.id);
+    expect(fetched.body.id).toBe(first.body.id);
+  });
+
+  it("cannot refund another merchant's payment", async () => {
+    const paymentB = await capturedPayment(b.apiKey.key);
+    const res = await asDashboard('post', `/payments/${paymentB}/refunds`, a.merchant.id)
+      .set('Idempotency-Key', randomUUID())
+      .send({});
+    expect(res.status).toBe(404);
+    expect(await db.refund.count({ where: { paymentId: paymentB } })).toBe(0);
+  });
+});
+
+describe('API keys', () => {
+  it('shows a new key once, and lists keys without the key or its hash', async () => {
+    const created = await asDashboard('post', '/api_keys', a.merchant.id);
+    expect(created.status).toBe(201);
+    expect(created.body.key).toMatch(/^sk_test_[0-9A-Za-z]{32}$/);
+    expect(created.body).toMatchObject({
+      id: expect.stringMatching(/^key_/),
+      prefix: created.body.key.slice(0, 12),
+      last_used_at: null,
+      revoked_at: null,
+    });
+
+    const list = await asDashboard('get', '/api_keys', a.merchant.id);
+    expect(list.status).toBe(200);
+    expect(list.body.data.map((k: { id: string }) => k.id)).toEqual([created.body.id, a.apiKey.id]);
+    const text = JSON.stringify(list.body);
+    expect(text).not.toContain(created.body.key);
+    expect(text).not.toMatch(/hash/i);
+    for (const key of list.body.data) expect(key).not.toHaveProperty('key');
+
+    // The new key works on the merchant API.
+    const res = await request(app)
+      .get('/v1/balance')
+      .set('Authorization', `Bearer ${created.body.key}`);
+    expect(res.status).toBe(200);
+  });
+
+  it('revokes a key, keeps the first revoked_at, and the key stops working', async () => {
+    const first = await asDashboard('post', `/api_keys/${a.apiKey.id}/revoke`, a.merchant.id);
+    const second = await asDashboard('post', `/api_keys/${a.apiKey.id}/revoke`, a.merchant.id);
+
+    expect(first.status).toBe(200);
+    expect(first.body.revoked_at).toEqual(expect.any(String));
+    expect(second.body.revoked_at).toBe(first.body.revoked_at);
+
+    const res = await request(app)
+      .get('/v1/balance')
+      .set('Authorization', `Bearer ${a.apiKey.key}`);
+    expect(res.status).toBe(401);
+  });
+
+  it("does not list or revoke another merchant's keys", async () => {
+    const list = await asDashboard('get', '/api_keys', a.merchant.id);
+    expect(list.body.data.map((k: { id: string }) => k.id)).not.toContain(b.apiKey.id);
+
+    const res = await asDashboard('post', `/api_keys/${b.apiKey.id}/revoke`, a.merchant.id);
+    expect(res.status).toBe(404);
+    const row = await db.apiKey.findUniqueOrThrow({ where: { id: b.apiKey.id } });
+    expect(row.revokedAt).toBeNull();
+  });
+});
+
+describe('reconciliation issues', () => {
+  it('lists open and resolved issues for the merchant only', async () => {
+    const open = await createIssue(a.merchant.id);
+    const resolved = await createIssue(a.merchant.id, new Date());
+    await createIssue(b.merchant.id);
+
+    const all = await asDashboard('get', '/reconciliation_issues', a.merchant.id);
+    expect(all.status).toBe(200);
+    expect(all.body.data.map((i: { id: string }) => i.id)).toEqual([resolved.id, open.id]);
+    expect(all.body.data[1]).toEqual({
+      id: open.id,
+      bank_date: '2026-10-29',
+      kind: 'status_mismatch',
+      gateway_reference: open.gatewayReference,
+      bank_ref: open.bankRef,
+      details: { gateway_status: 'failed', bank_status: 'success' },
+      resolved_at: null,
+      created_at: open.createdAt.toISOString(),
+    });
+
+    const onlyOpen = await asDashboard('get', '/reconciliation_issues?status=open', a.merchant.id);
+    expect(onlyOpen.body.data.map((i: { id: string }) => i.id)).toEqual([open.id]);
+    const onlyResolved = await asDashboard(
+      'get',
+      '/reconciliation_issues?status=resolved',
+      a.merchant.id,
+    );
+    expect(onlyResolved.body.data.map((i: { id: string }) => i.id)).toEqual([resolved.id]);
+  });
+
+  it('pages through issues', async () => {
+    const older = await createIssue(a.merchant.id);
+    const newer = await createIssue(a.merchant.id);
+
+    const first = await asDashboard('get', '/reconciliation_issues?limit=1', a.merchant.id);
+    expect(first.body).toMatchObject({ data: [{ id: newer.id }], has_more: true });
+    const second = await asDashboard(
+      'get',
+      `/reconciliation_issues?limit=1&starting_after=${newer.id}`,
+      a.merchant.id,
+    );
+    expect(second.body).toMatchObject({ data: [{ id: older.id }], has_more: false });
+  });
+
+  it('marks an issue resolved once', async () => {
+    const issue = await createIssue(a.merchant.id);
+    const path = `/reconciliation_issues/${issue.id}/resolve`;
+
+    const first = await asDashboard('post', path, a.merchant.id);
+    const second = await asDashboard('post', path, a.merchant.id);
+
+    expect(first.status).toBe(200);
+    expect(first.body.resolved_at).toEqual(expect.any(String));
+    expect(second.body.resolved_at).toBe(first.body.resolved_at);
+  });
+
+  it.each([
+    ["another merchant's issue", 'other'],
+    ['an unknown issue', randomUUID()],
+    ['an ID that is not a UUID', 'nope'],
+  ])('answers 404 when resolving %s', async (_name, id) => {
+    const other = await createIssue(b.merchant.id);
+    const issueId = id === 'other' ? other.id : id;
+
+    const res = await asDashboard(
+      'post',
+      `/reconciliation_issues/${issueId}/resolve`,
+      a.merchant.id,
+    );
+    expect(res.status).toBe(404);
+    const row = await db.reconciliationIssue.findUniqueOrThrow({ where: { id: other.id } });
+    expect(row.resolvedAt).toBeNull();
+  });
+
+  it('hides issues the bank has but no merchant owns', async () => {
+    await db.reconciliationIssue.create({
+      data: {
+        merchantId: null,
+        bankDate: new Date('2026-10-29'),
+        kind: 'missing_in_gateway',
+        gatewayReference: `unknown_${randomUUID()}`,
+        details: {},
+      },
+    });
+    const res = await asDashboard('get', '/reconciliation_issues', a.merchant.id);
+    expect(res.body.data).toEqual([]);
+  });
+});

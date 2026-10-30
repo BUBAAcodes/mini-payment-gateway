@@ -9,6 +9,7 @@ import { createLogger, redactCheckoutSecret } from './logger';
 import { errorHandler, notFoundHandler } from './middleware/errors';
 import { assignRequestId } from './middleware/request-id';
 import { checkoutRouter } from './routes/checkout';
+import { dashboardRouter } from './routes/dashboard';
 import { docsRouter } from './routes/docs';
 import { healthRouter, type CheckDb } from './routes/health';
 import { internalRouter } from './routes/internal';
@@ -61,6 +62,7 @@ export function createApp({
     }),
   );
   app.use('/internal', internalRouter({ db, bank, config }));
+  app.use('/dashboard', dashboardRouter({ db, bank, config }));
   if (extraRoutes) {
     const router = Router();
     extraRoutes(router);

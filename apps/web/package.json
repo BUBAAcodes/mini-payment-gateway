@@ -11,7 +11,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@gateway/db": "workspace:*",
     "@gateway/shared": "workspace:*",
+    "better-auth": "^1.7.14",
     "next": "16.4.3",
     "react": "19.3.0",
     "react-dom": "19.3.0",

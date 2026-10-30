@@ -37,6 +37,7 @@ services:
       # Read from the root .env; Compose refuses to start the API without it.
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY in .env}
       INTERNAL_CRON_SECRET: ${INTERNAL_CRON_SECRET:?set INTERNAL_CRON_SECRET in .env}
+      DASHBOARD_SERVICE_TOKEN: ${DASHBOARD_SERVICE_TOKEN:?set DASHBOARD_SERVICE_TOKEN in .env}
       SETTLEMENT_DELAY_DAYS: ${SETTLEMENT_DELAY_DAYS:-0}
       WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
       # Webhooks go to the demo-store service, a private Docker address. Never true when deployed.
@@ -49,17 +50,23 @@ services:
       redis:
         condition: service_healthy
 
-  # Checkout page (and later the dashboard). Its server code calls the API by service name; the
-  # browser only ever talks to web on localhost:3000.
+  # Checkout page and dashboard. Its server code calls the API by service name; the browser only
+  # ever talks to web on localhost:3000. Dashboard logins (Better Auth) live in Postgres.
   web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
     environment:
       API_BASE_URL: http://api:4000
+      DATABASE_URL: postgresql://gateway:gateway@postgres:5432/gateway
+      DASHBOARD_SERVICE_TOKEN: ${DASHBOARD_SERVICE_TOKEN:?set DASHBOARD_SERVICE_TOKEN in .env}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
     ports:
       - '3000:3000'
     depends_on:
+      postgres:
+        condition: service_healthy
       api:
         condition: service_healthy
 

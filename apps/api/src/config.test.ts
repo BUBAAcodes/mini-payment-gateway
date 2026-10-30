@@ -7,6 +7,7 @@ const validEnv = {
   REDIS_URL: 'redis://localhost:6379',
   APP_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
   INTERNAL_CRON_SECRET: randomBytes(32).toString('hex'),
+  DASHBOARD_SERVICE_TOKEN: randomBytes(32).toString('hex'),
 };
 
 describe('loadConfig', () => {
@@ -92,6 +93,14 @@ describe('loadConfig', () => {
     expect(() => loadConfig(env)).toThrow(/INTERNAL_CRON_SECRET/);
     expect(() => loadConfig({ ...validEnv, INTERNAL_CRON_SECRET: 'short' })).toThrow(
       /INTERNAL_CRON_SECRET: Must be at least 32 characters/,
+    );
+  });
+
+  it('fails at startup without a long DASHBOARD_SERVICE_TOKEN', () => {
+    const { DASHBOARD_SERVICE_TOKEN: _, ...env } = validEnv;
+    expect(() => loadConfig(env)).toThrow(/DASHBOARD_SERVICE_TOKEN/);
+    expect(() => loadConfig({ ...validEnv, DASHBOARD_SERVICE_TOKEN: 'short' })).toThrow(
+      /DASHBOARD_SERVICE_TOKEN: Must be at least 32 characters/,
     );
   });
 

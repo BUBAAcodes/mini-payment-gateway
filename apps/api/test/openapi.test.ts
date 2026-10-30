@@ -26,11 +26,21 @@ beforeAll(() => {
 interface Layer {
   route?: { path: string; methods: Record<string, boolean> };
   handle?: { stack?: Layer[] };
+  /** True for routers mounted at "/". */
+  slash: boolean;
+  match(path: string): unknown;
 }
+
+/**
+ * The dashboard API is private to the web app's server (it needs DASHBOARD_SERVICE_TOKEN), so the
+ * public docs leave it out. It reuses the merchant routers, so it is skipped by its mount path.
+ */
+const isDashboard = (layer: Layer) => !layer.slash && Boolean(layer.match('/dashboard'));
 
 /** Every route in the app as "METHOD /path", relative to the router it lives in. */
 function appRoutes(stack: Layer[]): string[] {
   return stack.flatMap((layer) => {
+    if (isDashboard(layer)) return [];
     if (layer.route) {
       const { path, methods } = layer.route;
       return Object.keys(methods)

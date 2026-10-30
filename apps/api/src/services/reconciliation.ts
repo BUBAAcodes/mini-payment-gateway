@@ -1,5 +1,15 @@
-import type { PrismaClient, ReconciliationIssueKind } from '@gateway/db';
-import { ValidationError } from '@gateway/shared';
+import type {
+  Prisma,
+  PrismaClient,
+  ReconciliationIssue,
+  ReconciliationIssueKind,
+} from '@gateway/db';
+import {
+  NotFoundError,
+  ValidationError,
+  type ListReconciliationIssuesInput,
+  type ReconciliationIssueResponse,
+} from '@gateway/shared';
 import type { BankClient } from '../fake-bank';
 import {
   istDate,
@@ -7,6 +17,7 @@ import {
   parseSettlementCsv,
   type BankFileRow,
 } from '../fake-bank/settlement-file';
+import { olderThan, toPage, type Page } from './pagination';
 
 // Reconciliation (section 9.8): checking our records against the bank's. The bank's daily file is
 // a second, independent account of what happened; wherever the two disagree we record an issue
@@ -242,4 +253,71 @@ export async function reconcile(
 /** YYYY-MM-DD plus some days. */
 function addDays(date: string, days: number): string {
   return new Date(Date.parse(`${date}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10);
+}
+
+// ---------- Issues, for the dashboard ----------
+
+// Issue IDs are Postgres UUIDs. Checking the shape first turns a malformed ID into a plain 404
+// instead of a database error.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The merchant's issues, newest first, optionally only open or only resolved. Issues with no
+ * merchant (a bank row we can't match to anyone) are ours to look at, so no merchant sees them.
+ */
+export async function listReconciliationIssues(
+  db: PrismaClient,
+  merchantId: string,
+  { limit, starting_after: startingAfter, status }: ListReconciliationIssuesInput,
+): Promise<Page<ReconciliationIssue>> {
+  let after: Prisma.ReconciliationIssueWhereInput = {};
+  if (startingAfter !== undefined) {
+    const cursor = UUID.test(startingAfter)
+      ? await db.reconciliationIssue.findFirst({ where: { id: startingAfter, merchantId } })
+      : null;
+    if (!cursor) throw new ValidationError('No such reconciliation issue', 'starting_after');
+    after = olderThan(cursor);
+  }
+
+  const resolved =
+    status === 'open'
+      ? { resolvedAt: null }
+      : status === 'resolved'
+        ? { NOT: { resolvedAt: null } }
+        : {};
+  const rows = await db.reconciliationIssue.findMany({
+    where: { merchantId, ...resolved, ...after },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+  });
+  return toPage(rows, limit);
+}
+
+/** Marks an issue resolved. Resolving twice keeps the first resolved_at. */
+export async function resolveReconciliationIssue(
+  db: PrismaClient,
+  merchantId: string,
+  issueId: string,
+): Promise<ReconciliationIssue> {
+  if (!UUID.test(issueId)) throw new NotFoundError('Reconciliation issue');
+  await db.reconciliationIssue.updateMany({
+    where: { id: issueId, merchantId, resolvedAt: null },
+    data: { resolvedAt: new Date() },
+  });
+  const issue = await db.reconciliationIssue.findFirst({ where: { id: issueId, merchantId } });
+  if (!issue) throw new NotFoundError('Reconciliation issue');
+  return issue;
+}
+
+export function reconciliationIssueResource(i: ReconciliationIssue): ReconciliationIssueResponse {
+  return {
+    id: i.id,
+    bank_date: i.bankDate.toISOString().slice(0, 10),
+    kind: i.kind,
+    gateway_reference: i.gatewayReference,
+    bank_ref: i.bankRef,
+    details: i.details as Record<string, unknown>,
+    resolved_at: i.resolvedAt?.toISOString() ?? null,
+    created_at: i.createdAt.toISOString(),
+  };
 }

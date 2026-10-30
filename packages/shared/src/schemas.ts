@@ -157,3 +157,10 @@ export const reconcileSchema = z.strictObject({
 });
 
 export type ReconcileInput = z.infer<typeof reconcileSchema>;
+
+/** GET /dashboard/reconciliation_issues: open, resolved, or (no filter) both. */
+export const listReconciliationIssuesSchema = paginationSchema.extend({
+  status: z.enum(['open', 'resolved']).optional(),
+});
+
+export type ListReconciliationIssuesInput = z.infer<typeof listReconciliationIssuesSchema>;

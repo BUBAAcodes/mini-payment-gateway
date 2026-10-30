@@ -176,6 +176,40 @@ export const balanceResponseSchema = z
   })
   .meta({ id: 'Balance' });
 
+// ---------- Dashboard only (/dashboard/*): not part of the public docs ----------
+
+export const merchantResponseSchema = z
+  .object({ id: z.string(), name: z.string(), created_at: timestamp })
+  .meta({ id: 'Merchant' });
+
+/** An API key as the dashboard lists it: never the key itself, never its hash. */
+export const apiKeyResponseSchema = z
+  .object({
+    id: z.string().meta({ example: 'key_8fK2mQx9LpZ3aB' }),
+    prefix: z.string().meta({ description: 'The first 12 characters, to tell keys apart' }),
+    last_used_at: timestamp.nullable(),
+    revoked_at: timestamp.nullable(),
+    created_at: timestamp,
+  })
+  .meta({ id: 'ApiKey' });
+
+export const createdApiKeyResponseSchema = apiKeyResponseSchema
+  .extend({ key: z.string().meta({ description: 'The full key. Shown this once only' }) })
+  .meta({ id: 'CreatedApiKey' });
+
+export const reconciliationIssueResponseSchema = z
+  .object({
+    id: z.string(),
+    bank_date: z.string().meta({ example: '2026-10-29' }),
+    kind: z.enum(['missing_in_gateway', 'missing_in_bank', 'amount_mismatch', 'status_mismatch']),
+    gateway_reference: z.string().nullable(),
+    bank_ref: z.string().nullable(),
+    details: z.record(z.string(), z.unknown()),
+    resolved_at: timestamp.nullable(),
+    created_at: timestamp,
+  })
+  .meta({ id: 'ReconciliationIssue' });
+
 export const checkoutOrderResponseSchema = z
   .object({
     id: z.string(),
@@ -227,5 +261,9 @@ export type WebhookDeliveryResponse = z.output<typeof webhookDeliveryResponseSch
 export type EventResponse = z.output<typeof eventResponseSchema>;
 export type SettlementResponse = z.output<typeof settlementResponseSchema>;
 export type BalanceResponse = z.output<typeof balanceResponseSchema>;
+export type MerchantResponse = z.output<typeof merchantResponseSchema>;
+export type ApiKeyResponse = z.output<typeof apiKeyResponseSchema>;
+export type CreatedApiKeyResponse = z.output<typeof createdApiKeyResponseSchema>;
+export type ReconciliationIssueResponse = z.output<typeof reconciliationIssueResponseSchema>;
 export type CheckoutOrderResponse = z.output<typeof checkoutOrderResponseSchema>;
 export type CheckoutPaymentResponse = z.output<typeof checkoutPaymentResponseSchema>;

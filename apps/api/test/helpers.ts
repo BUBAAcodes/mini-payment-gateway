@@ -19,6 +19,7 @@ export const testConfig: AppConfig = {
   // Test webhook receivers listen on 127.0.0.1. Tests of the SSRF checks turn this off.
   ALLOW_PRIVATE_WEBHOOK_URLS: true,
   INTERNAL_CRON_SECRET: randomBytes(32).toString('hex'),
+  DASHBOARD_SERVICE_TOKEN: randomBytes(32).toString('hex'),
   SETTLEMENT_DELAY_DAYS: 0,
   // High, so no test hits the limit by accident. test/rate-limit.test.ts sets its own.
   RATE_LIMIT_PER_MINUTE: 10_000,

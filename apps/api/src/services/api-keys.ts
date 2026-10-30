@@ -1,12 +1,16 @@
-import type { PrismaClient } from '@gateway/db';
+import type { ApiKey, Prisma, PrismaClient } from '@gateway/db';
 import {
   API_KEY_PREFIX_LENGTH,
   NotFoundError,
+  ValidationError,
   constantTimeEqual,
   generateApiKey,
+  isId,
   newId,
   sha256Hex,
+  type ApiKeyResponse,
 } from '@gateway/shared';
+import { olderThan, toPage, type Page } from './pagination';
 
 const API_KEY_FORMAT = /^sk_test_[0-9A-Za-z]{32}$/;
 
@@ -20,6 +24,7 @@ export interface CreatedApiKey {
   key: string;
   prefix: string;
   createdAt: Date;
+  row: ApiKey;
 }
 
 export interface ApiKeyIdentity {
@@ -32,7 +37,30 @@ export async function createApiKey(db: PrismaClient, merchantId: string): Promis
   const row = await db.apiKey.create({
     data: { id: newId('key'), merchantId, prefix, keyHash: hash },
   });
-  return { id: row.id, key, prefix, createdAt: row.createdAt };
+  return { id: row.id, key, prefix, createdAt: row.createdAt, row };
+}
+
+/** Newest first, revoked keys included. `startingAfter` is the last ID of the previous page. */
+export async function listApiKeys(
+  db: PrismaClient,
+  merchantId: string,
+  { limit, startingAfter }: { limit: number; startingAfter?: string },
+): Promise<Page<ApiKey>> {
+  let after: Prisma.ApiKeyWhereInput = {};
+  if (startingAfter !== undefined) {
+    const cursor = isId('key', startingAfter)
+      ? await db.apiKey.findFirst({ where: { id: startingAfter, merchantId } })
+      : null;
+    if (!cursor) throw new ValidationError('No such API key', 'starting_after');
+    after = olderThan(cursor);
+  }
+
+  const rows = await db.apiKey.findMany({
+    where: { merchantId, ...after },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+  });
+  return toPage(rows, limit);
 }
 
 /** Revoking twice is fine and keeps the first revoked_at. Another merchant's key is "not found". */
@@ -40,15 +68,15 @@ export async function revokeApiKey(
   db: PrismaClient,
   merchantId: string,
   apiKeyId: string,
-): Promise<void> {
-  const { count } = await db.apiKey.updateMany({
+): Promise<ApiKey> {
+  // Only sets revoked_at if it isn't set yet, so a second revoke changes nothing.
+  await db.apiKey.updateMany({
     where: { id: apiKeyId, merchantId, revokedAt: null },
     data: { revokedAt: new Date() },
   });
-  if (count > 0) return;
-
-  const exists = await db.apiKey.findFirst({ where: { id: apiKeyId, merchantId } });
-  if (!exists) throw new NotFoundError('API key');
+  const row = await db.apiKey.findFirst({ where: { id: apiKeyId, merchantId } });
+  if (!row) throw new NotFoundError('API key');
+  return row;
 }
 
 /**
@@ -71,4 +99,15 @@ export async function authenticateApiKey(
     await db.apiKey.update({ where: { id: row.id }, data: { lastUsedAt: new Date(now) } });
   }
   return { merchantId: row.merchantId, apiKeyId: row.id };
+}
+
+/** What the dashboard shows for a key: never the key itself, never its hash. */
+export function apiKeyResource(k: ApiKey): ApiKeyResponse {
+  return {
+    id: k.id,
+    prefix: k.prefix,
+    last_used_at: k.lastUsedAt?.toISOString() ?? null,
+    revoked_at: k.revokedAt?.toISOString() ?? null,
+    created_at: k.createdAt.toISOString(),
+  };
 }

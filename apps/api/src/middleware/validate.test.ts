@@ -24,6 +24,7 @@ const app = createApp({
     BANK_TIMEOUT_MS: 1000,
     ALLOW_PRIVATE_WEBHOOK_URLS: false,
     INTERNAL_CRON_SECRET: randomBytes(32).toString('hex'),
+    DASHBOARD_SERVICE_TOKEN: randomBytes(32).toString('hex'),
     SETTLEMENT_DELAY_DAYS: 0,
     RATE_LIMIT_PER_MINUTE: 100,
   },

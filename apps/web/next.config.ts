@@ -10,7 +10,11 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   // Workspace packages ship TypeScript source, so Next.js has to compile them.
-  transpilePackages: ['@gateway/shared'],
+  transpilePackages: ['@gateway/shared', '@gateway/db'],
+  // There is no home page: the site is the dashboard (and /pay checkout links).
+  async redirects() {
+    return [{ source: '/', destination: '/dashboard', permanent: false }];
+  },
   turbopack: {
     rules: {
       '*.css': {
