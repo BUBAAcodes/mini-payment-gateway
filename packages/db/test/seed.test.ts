@@ -2,7 +2,7 @@ import { randomBytes, scryptSync } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { calculateFee, decryptSecret, sha256Hex } from '@gateway/shared';
 import type { PrismaClient } from '../src/generated/prisma/client';
-import { DEMO_LOGIN, seedDemo, type SeedCreated } from '../src/seed';
+import { DEMO_LOGIN, demoWebhookUrl, seedDemo, type SeedCreated } from '../src/seed';
 import { testPrisma } from '../src/testing';
 
 const encryptionKey = randomBytes(32).toString('base64');
@@ -46,6 +46,19 @@ describe('seedDemo', () => {
       keyHash: sha256Hex(seeded.apiKey),
       revokedAt: null,
     });
+  });
+
+  it('points the demo webhook endpoint at the store, or at an override for Docker', () => {
+    expect(demoWebhookUrl({ storeBaseUrl: 'http://localhost:3001/' })).toBe(
+      'http://localhost:3001/webhooks/gateway',
+    );
+    // In Docker the browser uses localhost:3001, but the API container reaches the store by name.
+    expect(
+      demoWebhookUrl({
+        storeBaseUrl: 'http://localhost:3001',
+        webhookUrl: 'http://demo-store:3001/webhooks/gateway',
+      }),
+    ).toBe('http://demo-store:3001/webhooks/gateway');
   });
 
   it('creates a webhook endpoint for the demo store with an encrypted secret', async () => {

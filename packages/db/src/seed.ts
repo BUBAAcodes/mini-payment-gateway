@@ -21,6 +21,20 @@ export interface SeedOptions {
   feeBps: number;
   /** The demo store's public URL; the webhook endpoint points at it. */
   storeBaseUrl: string;
+  /**
+   * Where the API sends the demo store's webhooks, if not {storeBaseUrl}/webhooks/gateway. In
+   * Docker the browser reaches the store at localhost:3001, but the API container must use the
+   * service name: http://demo-store:3001/webhooks/gateway.
+   */
+  webhookUrl?: string;
+}
+
+/** The URL the demo webhook endpoint points at. */
+export function demoWebhookUrl({
+  storeBaseUrl,
+  webhookUrl,
+}: Pick<SeedOptions, 'storeBaseUrl' | 'webhookUrl'>): string {
+  return webhookUrl || `${storeBaseUrl.replace(/\/+$/, '')}/webhooks/gateway`;
 }
 
 export interface SeedCreated {
@@ -119,7 +133,7 @@ export async function seedDemo(prisma: PrismaClient, options: SeedOptions): Prom
         data: {
           id: newId('we'),
           merchantId,
-          url: `${storeBaseUrl}/webhooks/gateway`,
+          url: demoWebhookUrl(options),
           secret: encryptSecret(webhookSecret, options.encryptionKey),
           eventTypes: ['*'],
         },

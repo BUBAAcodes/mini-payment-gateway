@@ -3,7 +3,7 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createPrismaClient } from '../src/client';
-import { seedDemo } from '../src/seed';
+import { demoWebhookUrl, seedDemo } from '../src/seed';
 
 const rootEnv = fileURLToPath(new URL('../../../.env', import.meta.url));
 if (existsSync(rootEnv)) {
@@ -18,13 +18,17 @@ function requireEnv(name: string): string {
   return value;
 }
 
+const options = {
+  encryptionKey: requireEnv('APP_ENCRYPTION_KEY'),
+  feeBps: Number(process.env.FEE_BPS || 200),
+  storeBaseUrl: process.env.STORE_BASE_URL || 'http://localhost:3001',
+  // Docker: http://demo-store:3001/webhooks/gateway (the API container can't reach localhost:3001).
+  webhookUrl: process.env.STORE_WEBHOOK_URL || undefined,
+};
+
 const prisma = createPrismaClient(requireEnv('DATABASE_URL'));
 try {
-  const result = await seedDemo(prisma, {
-    encryptionKey: requireEnv('APP_ENCRYPTION_KEY'),
-    feeBps: Number(process.env.FEE_BPS || 200),
-    storeBaseUrl: process.env.STORE_BASE_URL || 'http://localhost:3001',
-  });
+  const result = await seedDemo(prisma, options);
 
   if (result.status === 'already_seeded') {
     console.log('Already seeded. Run `pnpm db:reset` to start over (it deletes all data).');
@@ -36,6 +40,8 @@ These secrets are shown once. Only their hashes or ciphertexts are stored.
 Dashboard login
   email     ${result.login.email}
   password  ${result.login.password}
+
+Webhooks for the demo store go to ${demoWebhookUrl(options)}
 
 Demo store (apps/demo-store) environment
   GATEWAY_SECRET_KEY=${result.apiKey}
