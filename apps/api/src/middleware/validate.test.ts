@@ -21,6 +21,8 @@ const app = createApp({
     FEE_BPS: 200,
     BANK_TIMEOUT_MS: 1000,
     ALLOW_PRIVATE_WEBHOOK_URLS: false,
+    INTERNAL_CRON_SECRET: randomBytes(32).toString('hex'),
+    SETTLEMENT_DELAY_DAYS: 0,
   },
   extraRoutes: (router) => {
     router.post(

@@ -1,6 +1,6 @@
 import type { RequestHandler, Response } from 'express';
 import type { PrismaClient } from '@gateway/db';
-import { UnauthorizedError } from '@gateway/shared';
+import { UnauthorizedError, constantTimeEqual } from '@gateway/shared';
 import { authenticateApiKey } from '../services/api-keys';
 
 const BEARER = /^Bearer (\S+)$/;
@@ -28,4 +28,18 @@ export function merchantIdOf(res: Response): string {
     throw new Error('merchantIdOf() used on a route without requireApiKey');
   }
   return merchantId;
+}
+
+/**
+ * Requires `Authorization: Bearer <secret>`, for the internal routes the daily cron calls. Compared
+ * in constant time; every failure gets the same 401.
+ */
+export function requireBearerSecret(secret: string): RequestHandler {
+  return (req, _res, next) => {
+    const token = BEARER.exec(req.headers.authorization ?? '')?.[1];
+    if (!token || !constantTimeEqual(token, secret)) {
+      throw new UnauthorizedError('Invalid or missing token');
+    }
+    next();
+  };
 }

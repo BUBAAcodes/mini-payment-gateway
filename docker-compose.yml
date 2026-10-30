@@ -35,6 +35,8 @@ services:
       LOG_LEVEL: info
       # Read from the root .env; Compose refuses to start the API without it.
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY in .env}
+      INTERNAL_CRON_SECRET: ${INTERNAL_CRON_SECRET:?set INTERNAL_CRON_SECRET in .env}
+      SETTLEMENT_DELAY_DAYS: ${SETTLEMENT_DELAY_DAYS:-0}
       WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
       # Webhooks go to the demo-store service, a private Docker address. Never true when deployed.
       ALLOW_PRIVATE_WEBHOOK_URLS: 'true'

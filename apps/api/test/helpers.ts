@@ -16,6 +16,8 @@ export const testConfig: AppConfig = {
   BANK_TIMEOUT_MS: 200,
   // Test webhook receivers listen on 127.0.0.1. Tests of the SSRF checks turn this off.
   ALLOW_PRIVATE_WEBHOOK_URLS: true,
+  INTERNAL_CRON_SECRET: randomBytes(32).toString('hex'),
+  SETTLEMENT_DELAY_DAYS: 0,
 };
 
 export interface TestAppOptions {

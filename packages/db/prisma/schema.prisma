@@ -214,12 +214,15 @@ model Payment {
   bankStatusChecks Int           @default(0) @map("bank_status_checks")
   authorizedAt     DateTime?     @map("authorized_at") @db.Timestamptz(3)
   capturedAt       DateTime?     @map("captured_at") @db.Timestamptz(3)
+  /// The settlement that paid this capture out to the merchant. Null until then.
+  settlementId     String?       @map("settlement_id")
   createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  merchant Merchant @relation(fields: [merchantId], references: [id])
-  order    Order    @relation(fields: [orderId], references: [id])
-  refunds  Refund[]
+  merchant   Merchant    @relation(fields: [merchantId], references: [id])
+  order      Order       @relation(fields: [orderId], references: [id])
+  settlement Settlement? @relation(fields: [settlementId], references: [id])
+  refunds    Refund[]
 
   // Rule 5: at most one attempt per order is in progress at a time. Declared here (partialIndexes
   // preview) rather than in raw SQL, because Prisma drops partial indexes it doesn't know about.
@@ -228,6 +231,7 @@ model Payment {
   @@unique([orderId], map: "one_active_attempt", where: raw("status = ANY (ARRAY['created'::payment_status, 'otp_required'::payment_status, 'pending'::payment_status, 'authorized'::payment_status])"))
   @@index([orderId])
   @@index([merchantId, createdAt])
+  @@index([merchantId, settlementId])
   @@index([status])
   @@map("payments")
 }
@@ -242,14 +246,18 @@ model Refund {
   bankRef       String?      @map("bank_ref")
   failureReason String?      @map("failure_reason")
   processedAt   DateTime?    @map("processed_at") @db.Timestamptz(3)
+  /// The settlement that took this refund out of the merchant's payout. Null until then.
+  settlementId  String?      @map("settlement_id")
   createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  merchant Merchant @relation(fields: [merchantId], references: [id])
-  payment  Payment  @relation(fields: [paymentId], references: [id])
+  merchant   Merchant    @relation(fields: [merchantId], references: [id])
+  payment    Payment     @relation(fields: [paymentId], references: [id])
+  settlement Settlement? @relation(fields: [settlementId], references: [id])
 
   @@index([paymentId])
   @@index([merchantId, createdAt])
+  @@index([merchantId, settlementId])
   @@map("refunds")
 }
 
@@ -464,7 +472,10 @@ model Settlement {
   status      SettlementStatus @default(processed)
   createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  merchant Merchant @relation(fields: [merchantId], references: [id])
+  merchant        Merchant  @relation(fields: [merchantId], references: [id])
+  /// The captures this settlement paid out and the refunds it took back.
+  settledPayments Payment[]
+  settledRefunds  Refund[]
 
   @@index([merchantId, createdAt])
   @@map("settlements")
@@ -517,6 +528,8 @@ model ReconciliationIssue {
 
   merchant Merchant? @relation(fields: [merchantId], references: [id])
 
+  // One issue per problem: re-running a day's reconciliation finds the same ones again.
+  @@unique([bankDate, kind, gatewayReference])
   @@index([merchantId, bankDate])
   @@map("reconciliation_issues")
 }

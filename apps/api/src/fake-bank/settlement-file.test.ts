@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { istDate, istDayBounds, toSettlementCsv } from './settlement-file';
+import { istDate, istDayBounds, parseSettlementCsv, toSettlementCsv } from './settlement-file';
 
 describe('istDayBounds', () => {
   it('covers midnight to midnight in India (UTC+05:30)', () => {
@@ -65,5 +65,71 @@ describe('toSettlementCsv', () => {
     expect(toSettlementCsv('2026-10-29', [])).toBe(
       'bank_ref,gateway_reference,type,amount,status,bank_date\n',
     );
+  });
+});
+
+describe('parseSettlementCsv', () => {
+  const HEADER = 'bank_ref,gateway_reference,type,amount,status,bank_date';
+
+  it('reads back what toSettlementCsv writes', () => {
+    const csv = toSettlementCsv('2026-10-29', [
+      {
+        bankRef: 'bank_A',
+        gatewayReference: 'pay_1',
+        type: 'payment',
+        amount: 50_000,
+        outcome: 'approved',
+      },
+      {
+        bankRef: 'bank_B',
+        gatewayReference: 'rfnd_1',
+        type: 'refund',
+        amount: 20_000,
+        outcome: 'declined',
+      },
+    ]);
+
+    expect(parseSettlementCsv('2026-10-29', csv)).toEqual([
+      {
+        bankRef: 'bank_A',
+        gatewayReference: 'pay_1',
+        type: 'payment',
+        amount: 50_000,
+        status: 'success',
+      },
+      {
+        bankRef: 'bank_B',
+        gatewayReference: 'rfnd_1',
+        type: 'refund',
+        amount: 20_000,
+        status: 'failed',
+      },
+    ]);
+  });
+
+  it('reads a file with no transactions, and tolerates CRLF line endings', () => {
+    expect(parseSettlementCsv('2026-10-29', `${HEADER}\n`)).toEqual([]);
+    expect(
+      parseSettlementCsv(
+        '2026-10-29',
+        `${HEADER}\r\nbank_A,pay_1,payment,100,success,2026-10-29\r\n`,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('rejects a file with the wrong header', () => {
+    expect(() => parseSettlementCsv('2026-10-29', 'ref,amount\n')).toThrow(/header/);
+  });
+
+  it.each([
+    ['too few fields', 'bank_A,pay_1,payment,100,success'],
+    ['an unknown type', 'bank_A,pay_1,payout,100,success,2026-10-29'],
+    ['an amount that is not whole paise', 'bank_A,pay_1,payment,1.5,success,2026-10-29'],
+    ['a zero amount', 'bank_A,pay_1,payment,0,success,2026-10-29'],
+    ['an unknown status', 'bank_A,pay_1,payment,100,maybe,2026-10-29'],
+    ['a row from another day', 'bank_A,pay_1,payment,100,success,2026-10-28'],
+    ['an empty reference', 'bank_A,,payment,100,success,2026-10-29'],
+  ])('rejects a row with %s, naming its line', (_name, line) => {
+    expect(() => parseSettlementCsv('2026-10-29', `${HEADER}\n${line}\n`)).toThrow(/line 2/);
   });
 });

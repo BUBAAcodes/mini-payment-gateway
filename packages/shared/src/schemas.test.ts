@@ -8,6 +8,7 @@ import {
   idSchema,
   paginationSchema,
   payOrderSchema,
+  reconcileSchema,
   redeliverEventSchema,
   submitOtpSchema,
 } from './schemas';
@@ -255,5 +256,21 @@ describe('redeliverEventSchema', () => {
     ['an unknown field', { endpoint: newId('we') }],
   ])('rejects %s', (_name, body) => {
     expect(redeliverEventSchema.safeParse(body).success).toBe(false);
+  });
+});
+
+describe('reconcileSchema', () => {
+  it('takes an optional bank_date', () => {
+    expect(reconcileSchema.parse({})).toEqual({});
+    expect(reconcileSchema.parse({ bank_date: '2026-10-29' })).toEqual({ bank_date: '2026-10-29' });
+  });
+
+  it.each([
+    ['a date that does not exist', { bank_date: '2026-02-30' }],
+    ['another date format', { bank_date: '29-10-2026' }],
+    ['a timestamp', { bank_date: '2026-10-29T00:00:00Z' }],
+    ['an unknown field', { date: '2026-10-29' }],
+  ])('rejects %s', (_name, body) => {
+    expect(reconcileSchema.safeParse(body).success).toBe(false);
   });
 });

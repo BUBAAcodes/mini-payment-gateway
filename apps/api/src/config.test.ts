@@ -5,6 +5,7 @@ import { loadConfig } from './config';
 const validEnv = {
   DATABASE_URL: 'postgresql://gateway:gateway@localhost:5432/gateway',
   APP_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
+  INTERNAL_CRON_SECRET: randomBytes(32).toString('hex'),
 };
 
 describe('loadConfig', () => {
@@ -83,5 +84,23 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...validEnv, ALLOW_PRIVATE_WEBHOOK_URLS: 'yes' })).toThrow(
       /ALLOW_PRIVATE_WEBHOOK_URLS/,
     );
+  });
+
+  it('fails at startup without a long INTERNAL_CRON_SECRET', () => {
+    const { INTERNAL_CRON_SECRET: _, ...env } = validEnv;
+    expect(() => loadConfig(env)).toThrow(/INTERNAL_CRON_SECRET/);
+    expect(() => loadConfig({ ...validEnv, INTERNAL_CRON_SECRET: 'short' })).toThrow(
+      /INTERNAL_CRON_SECRET: Must be at least 32 characters/,
+    );
+  });
+
+  it('settles everything so far by default, and reads SETTLEMENT_DELAY_DAYS as whole days', () => {
+    expect(loadConfig(validEnv).SETTLEMENT_DELAY_DAYS).toBe(0);
+    expect(loadConfig({ ...validEnv, SETTLEMENT_DELAY_DAYS: '2' }).SETTLEMENT_DELAY_DAYS).toBe(2);
+    for (const bad of ['-1', '1.5', 'T+2']) {
+      expect(() => loadConfig({ ...validEnv, SETTLEMENT_DELAY_DAYS: bad })).toThrow(
+        /SETTLEMENT_DELAY_DAYS/,
+      );
+    }
   });
 });

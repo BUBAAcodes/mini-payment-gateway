@@ -5,6 +5,7 @@ import type {
   Payment,
   Prisma,
   Refund,
+  Settlement,
 } from '@gateway/db';
 import { newId } from '@gateway/shared';
 
@@ -154,6 +155,28 @@ export function postRefund(
         amount: refund.amount,
       },
       { account: 'gateway_clearing', direction: 'credit', amount: refund.amount },
+    ],
+  );
+}
+
+/**
+ * A settlement's payout (section 9.4): we pay the merchant its net, so we owe it that much less.
+ * Only positive nets are paid out (section 9.7).
+ */
+export function postPayout(
+  tx: Prisma.TransactionClient,
+  settlement: Settlement,
+): Promise<LedgerTransaction> {
+  return postLedgerTransaction(
+    tx,
+    { type: 'payout', referenceType: 'settlement', referenceId: settlement.id },
+    [
+      {
+        account: merchantBalanceAccount(settlement.merchantId),
+        direction: 'debit',
+        amount: settlement.net,
+      },
+      { account: 'payouts', direction: 'credit', amount: settlement.net },
     ],
   );
 }

@@ -122,3 +122,22 @@ export const redeliverEventSchema = z.strictObject({
 });
 
 export type RedeliverEventInput = z.infer<typeof redeliverEventSchema>;
+
+/** A calendar date like 2026-10-29. Rejects dates that don't exist, such as 2026-02-30. */
+export const dateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be a date like 2026-10-29')
+  .refine((value) => {
+    const date = new Date(`${value}T00:00:00Z`);
+    return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  }, 'Must be a date that exists');
+
+/**
+ * POST /internal/reconcile. Without bank_date, reconciles every day since the last import through
+ * yesterday (India time).
+ */
+export const reconcileSchema = z.strictObject({
+  bank_date: dateSchema.optional(),
+});
+
+export type ReconcileInput = z.infer<typeof reconcileSchema>;

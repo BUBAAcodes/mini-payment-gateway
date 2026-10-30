@@ -10,6 +10,7 @@ import { errorHandler, notFoundHandler } from './middleware/errors';
 import { assignRequestId } from './middleware/request-id';
 import { checkoutRouter } from './routes/checkout';
 import { healthRouter, type CheckDb } from './routes/health';
+import { internalRouter } from './routes/internal';
 import { merchantRouter } from './routes/merchant';
 
 export interface AppDeps {
@@ -54,6 +55,7 @@ export function createApp({
       encryptionKey: config.APP_ENCRYPTION_KEY,
     }),
   );
+  app.use('/internal', internalRouter({ db, bank, config }));
   if (extraRoutes) {
     const router = Router();
     extraRoutes(router);

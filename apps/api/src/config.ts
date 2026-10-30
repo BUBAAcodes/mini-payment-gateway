@@ -27,6 +27,12 @@ const configSchema = z.object({
     .enum(['true', 'false'], { error: 'Must be "true" or "false"' })
     .default('false')
     .transform((value) => value === 'true'),
+  // Bearer token the daily cron sends to /internal/*. Long and random, like a password.
+  INTERNAL_CRON_SECRET: z
+    .string({ error: 'Required: at least 32 random characters' })
+    .min(32, 'Must be at least 32 characters'),
+  // Captures and refunds settle once they are this many days old. 0 settles everything so far.
+  SETTLEMENT_DELAY_DAYS: z.coerce.number().int().min(0).max(30).default(0),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -39,6 +45,8 @@ export type AppConfig = Pick<
   | 'FEE_BPS'
   | 'BANK_TIMEOUT_MS'
   | 'ALLOW_PRIVATE_WEBHOOK_URLS'
+  | 'INTERNAL_CRON_SECRET'
+  | 'SETTLEMENT_DELAY_DAYS'
 >;
 
 /** Reads config from the environment. Throws on startup instead of failing later on first use. */

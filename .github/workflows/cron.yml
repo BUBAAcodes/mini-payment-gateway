@@ -1,0 +1,54 @@
+name: Daily jobs
+
+# Settles merchants, reconciles yesterday's bank file and deletes old idempotency keys, by calling
+# the API's /internal routes. 02:00 IST is 20:30 UTC the day before.
+#
+# Needs a repository variable API_BASE_URL (the deployed API, e.g. https://gateway-api.onrender.com)
+# and a repository secret INTERNAL_CRON_SECRET (the same value the API has). Until API_BASE_URL is
+# set, the job is skipped. GitHub turns scheduled workflows off after 60 days without activity in
+# a public repo.
+
+on:
+  schedule:
+    - cron: '30 20 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+# Two runs at once would be safe, but there's no point in it.
+concurrency:
+  group: daily-jobs
+
+jobs:
+  daily:
+    name: Settle, reconcile, clean up
+    if: vars.API_BASE_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      API_BASE_URL: ${{ vars.API_BASE_URL }}
+      INTERNAL_CRON_SECRET: ${{ secrets.INTERNAL_CRON_SECRET }}
+    # Each call retries while the free server wakes up (about a minute). Retrying is safe: settled
+    # rows are stamped, and reconciling a day again adds nothing new. !cancelled() runs every step
+    # even if an earlier one failed; the job still fails, so the failure is visible.
+    steps:
+      - name: Settle
+        if: ${{ !cancelled() }}
+        run: >-
+          curl -fsS -X POST --retry 5 --retry-all-errors --retry-delay 20 --max-time 120
+          -H "Authorization: Bearer $INTERNAL_CRON_SECRET"
+          "$API_BASE_URL/internal/settle"
+
+      - name: Reconcile
+        if: ${{ !cancelled() }}
+        run: >-
+          curl -fsS -X POST --retry 5 --retry-all-errors --retry-delay 20 --max-time 120
+          -H "Authorization: Bearer $INTERNAL_CRON_SECRET"
+          "$API_BASE_URL/internal/reconcile"
+
+      - name: Clean up
+        if: ${{ !cancelled() }}
+        run: >-
+          curl -fsS -X POST --retry 5 --retry-all-errors --retry-delay 20 --max-time 120
+          -H "Authorization: Bearer $INTERNAL_CRON_SECRET"
+          "$API_BASE_URL/internal/cleanup"

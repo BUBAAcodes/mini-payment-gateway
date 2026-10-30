@@ -7,6 +7,7 @@ import { eventsRouter } from './events';
 import { ordersRouter } from './orders';
 import { paymentsRouter } from './payments';
 import { refundsRouter } from './refunds';
+import { settlementsRouter } from './settlements';
 import { webhookEndpointsRouter } from './webhook-endpoints';
 
 export interface MerchantRouterDeps {
@@ -25,5 +26,6 @@ export function merchantRouter({ db, bank, config }: MerchantRouterDeps): Router
   router.use(refundsRouter(db, bank, config));
   router.use(webhookEndpointsRouter(db, config));
   router.use(eventsRouter(db, config));
+  router.use(settlementsRouter(db));
   return router;
 }
