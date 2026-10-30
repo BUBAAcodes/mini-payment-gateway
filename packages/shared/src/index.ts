@@ -1,4 +1,5 @@
 export * from './cards';
+export * from './checkout-signature';
 export * from './crypto';
 export * from './errors';
 export * from './fee';

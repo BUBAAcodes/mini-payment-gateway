@@ -1,26 +1,106 @@
 @import 'tailwindcss';
 
+/*
+ * Store theme, after the Blackout reference (https://blackoutt.framer.website/): white, black,
+ * two greys, uppercase Inter Display headings. Variable names follow shadcn/ui, so `shadcn init`
+ * (step 20) picks them up as they are.
+ */
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #000000;
+  --card: #f6f6f6;
+  --card-foreground: #000000;
+  --primary: #000000;
+  --primary-foreground: #ffffff;
+  --muted: #ededed;
+  --muted-foreground: #757575;
+  --border: rgb(0 0 0 / 0.2);
+  --input: rgb(0 0 0 / 0.2);
+  --ring: #000000;
+  /* The reference's red (#ff0000) is too light for small text on white; this passes WCAG AA. */
+  --destructive: #d10000;
+  --radius: 6px;
+
+  /* Test Bank OTP page, after https://compassionate-celery-632226.framer.app/ */
+  --bank-background: #060606;
+  --bank-panel: #121214;
+  --bank-foreground: #fff8f0;
+  --bank-accent: #9b8cff;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-bank-background: var(--bank-background);
+  --color-bank-panel: var(--bank-panel);
+  --color-bank-foreground: var(--bank-foreground);
+  --color-bank-accent: var(--bank-accent);
+
+  --radius-control: var(--radius);
+  --radius-card: 10px;
+  --radius-otp: 12px;
+
+  --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
+  --font-pill: var(--font-instrument-sans), var(--font-inter), system-ui, sans-serif;
+
+  --animate-blur-in: blur-in 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-rise-in: rise-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-caret-blink: caret-blink 1.05s steps(1) infinite;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Inter at its largest optical size is Inter Display, the reference's heading face. */
+@utility font-display {
+  font-variation-settings: 'opsz' 32;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+@keyframes blur-in {
+  from {
+    opacity: 0;
+    filter: blur(10px);
+    transform: translateY(10px);
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@keyframes caret-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
 }

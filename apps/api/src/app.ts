@@ -46,7 +46,13 @@ export function createApp({
   app.use('/v1', merchantRouter(db, config));
   app.use(
     '/checkout',
-    checkoutRouter({ db, bank, feeBps: config.FEE_BPS, bankTimeoutMs: config.BANK_TIMEOUT_MS }),
+    checkoutRouter({
+      db,
+      bank,
+      feeBps: config.FEE_BPS,
+      bankTimeoutMs: config.BANK_TIMEOUT_MS,
+      encryptionKey: config.APP_ENCRYPTION_KEY,
+    }),
   );
   if (extraRoutes) {
     const router = Router();

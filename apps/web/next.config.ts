@@ -1,9 +1,10 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  /* config options here */
   cacheComponents: true,
   partialPrefetching: true,
+  // Workspace packages ship TypeScript source, so Next.js has to compile them.
+  transpilePackages: ['@gateway/shared'],
   turbopack: {
     rules: {
       '*.css': {

@@ -1,16 +1,18 @@
 import { Router, type Request } from 'express';
+import type { Payment } from '@gateway/db';
 import type { PayOrderInput } from '@gateway/shared';
 import { payOrderSchema, submitOtpSchema } from '@gateway/shared';
 import { validate } from '../../middleware/validate';
 import {
+  callbackRedirectUrl,
   checkoutOrderResource,
   checkoutPaymentResource,
   getCheckoutOrder,
   getCheckoutPayment,
   startPayment,
   submitOtp,
+  type CheckoutDeps,
 } from '../../services/checkout';
-import type { PaymentDeps } from '../../services/payments';
 
 /** A route's :id. Handlers behind validate() lose Express's path-param typing, so say it here. */
 type WithId = Request<{ id: string }>;
@@ -20,11 +22,19 @@ function clientSecretOf(req: Request): string | undefined {
   return typeof req.query.cs === 'string' ? req.query.cs : undefined;
 }
 
+/** The payment as the page sees it, plus where to send the customer once the attempt is over. */
+async function paymentBody(deps: CheckoutDeps, payment: Payment) {
+  return {
+    ...checkoutPaymentResource(payment),
+    redirect_url: await callbackRedirectUrl(deps.db, payment, deps.encryptionKey),
+  };
+}
+
 /**
  * The checkout API under /checkout (section 8). Only the Next.js server calls it, never the
  * browser. Every route needs the order's client secret in ?cs=.
  */
-export function checkoutRouter(deps: PaymentDeps): Router {
+export function checkoutRouter(deps: CheckoutDeps): Router {
   const router = Router();
 
   router.get('/orders/:id', async (req, res) => {
@@ -37,7 +47,7 @@ export function checkoutRouter(deps: PaymentDeps): Router {
   router.post('/orders/:id/pay', validate({ body: payOrderSchema }), async (req: WithId, res) => {
     const input = res.locals.validated.body as PayOrderInput;
     const payment = await startPayment(deps, req.params.id, clientSecretOf(req), input, req.log);
-    res.status(201).json(checkoutPaymentResource(payment));
+    res.status(201).json(await paymentBody(deps, payment));
   });
 
   router.post(
@@ -46,14 +56,14 @@ export function checkoutRouter(deps: PaymentDeps): Router {
     async (req: WithId, res) => {
       const { otp } = res.locals.validated.body as { otp: string };
       const payment = await submitOtp(deps, req.params.id, clientSecretOf(req), otp, req.log);
-      res.json(checkoutPaymentResource(payment));
+      res.json(await paymentBody(deps, payment));
     },
   );
 
   // The page polls this while a payment is pending.
   router.get('/payments/:id', async (req, res) => {
     const payment = await getCheckoutPayment(deps.db, req.params.id, clientSecretOf(req));
-    res.json(checkoutPaymentResource(payment));
+    res.json(await paymentBody(deps, payment));
   });
 
   return router;

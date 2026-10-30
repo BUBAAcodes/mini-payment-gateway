@@ -7,13 +7,21 @@ import {
   cardLast4,
   cardNetwork,
   constantTimeEqual,
+  decryptSecret,
   isId,
   newId,
   sha256Hex,
+  signCheckoutRedirect,
   type PayOrderInput,
 } from '@gateway/shared';
 import { moveTo } from './payment-state';
 import { authorizeWithBank, type PaymentDeps } from './payments';
+
+/** What the checkout routes need: moving payments, plus the key that signs redirects. */
+export interface CheckoutDeps extends PaymentDeps {
+  /** APP_ENCRYPTION_KEY: decrypts each merchant's checkout signing secret. */
+  encryptionKey: string;
+}
 
 // The checkout page's side of the API. Callers prove they may see an order with its client secret
 // (cs_...), which only the merchant's checkout URL carries. A wrong secret gets "not found", the
@@ -112,6 +120,34 @@ export async function submitOtp(
   }
   const pending = await moveTo(deps.db, payment, 'pending');
   return authorizeWithBank(deps, pending, log, otp);
+}
+
+/**
+ * Where checkout sends the customer once an attempt is over (section 9.1, step 9): the order's
+ * callback_url plus order_id, payment_id, status and signature. Null while the payment is still in
+ * progress, or if the merchant gave no callback_url. The API builds it, not the web app, because
+ * only the API can decrypt the merchant's checkout signing secret.
+ */
+export async function callbackRedirectUrl(
+  db: PrismaClient,
+  payment: Payment,
+  encryptionKey: string,
+): Promise<string | null> {
+  if (payment.status !== 'captured' && payment.status !== 'failed') return null;
+  const order = await db.order.findUniqueOrThrow({
+    where: { id: payment.orderId },
+    select: { callbackUrl: true, merchant: { select: { checkoutSigningSecret: true } } },
+  });
+  if (!order.callbackUrl) return null;
+
+  const secret = decryptSecret(order.merchant.checkoutSigningSecret, encryptionKey);
+  // searchParams keeps any query string the merchant already put in its callback_url.
+  const url = new URL(order.callbackUrl);
+  url.searchParams.set('order_id', payment.orderId);
+  url.searchParams.set('payment_id', payment.id);
+  url.searchParams.set('status', payment.status);
+  url.searchParams.set('signature', signCheckoutRedirect(payment.orderId, payment.id, secret));
+  return url.toString();
 }
 
 /** SELECT … FOR UPDATE: pay attempts on one order wait for each other instead of racing. */

@@ -1,9 +1,20 @@
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { newId } from '@gateway/shared';
+import {
+  encryptSecret,
+  generateCheckoutSecret,
+  newId,
+  verifyCheckoutRedirect,
+} from '@gateway/shared';
 import type { PrismaClient } from '@gateway/db';
 import { testPrisma } from '@gateway/db/testing';
-import { merchantWithKey, newCheckoutOrder, testApp, type CheckoutOrder } from './helpers';
+import {
+  merchantWithKey,
+  newCheckoutOrder,
+  testApp,
+  testConfig,
+  type CheckoutOrder,
+} from './helpers';
 
 let db: PrismaClient;
 let app: ReturnType<typeof testApp>;
@@ -127,6 +138,7 @@ describe('paying with UPI', () => {
       card_network: null,
       status: 'captured',
       failure_reason: null,
+      redirect_url: null,
     });
     expect(await db.payment.findUniqueOrThrow({ where: { id: res.body.id } })).toMatchObject({
       fee: 1_000,
@@ -347,5 +359,94 @@ describe('GET /checkout/payments/:id', () => {
     expect(res.body).toEqual(body);
     expect((await getPayment(order, body.id, other.cs)).status).toBe(404);
     expect((await getPayment(order, newId('pay'))).status).toBe(404);
+  });
+});
+
+describe('sending the customer back to the merchant (section 9.1, step 9)', () => {
+  const CALLBACK_URL = 'https://store.test/payments/callback';
+  let signer: Awaited<ReturnType<typeof merchantWithKey>>;
+  let checkoutSecret: string;
+
+  // The shared test merchant's secret isn't real ciphertext. This one is, so redirects get signed.
+  beforeAll(async () => {
+    signer = await merchantWithKey(db);
+    checkoutSecret = generateCheckoutSecret();
+    await db.merchant.update({
+      where: { id: signer.merchant.id },
+      data: { checkoutSigningSecret: encryptSecret(checkoutSecret, testConfig.APP_ENCRYPTION_KEY) },
+    });
+  });
+
+  const signedOrder = (body: object = { callback_url: CALLBACK_URL }) =>
+    newCheckoutOrder(app, signer.apiKey.key, body);
+
+  function parseRedirect(redirectUrl: string) {
+    const url = new URL(redirectUrl);
+    return { base: `${url.origin}${url.pathname}`, params: Object.fromEntries(url.searchParams) };
+  }
+
+  it('a captured payment gets the callback URL with a signature the merchant can verify', async () => {
+    const order = await signedOrder();
+
+    const { body } = await pay(order, upi('success@test'));
+
+    const { base, params } = parseRedirect(body.redirect_url);
+    expect(base).toBe(CALLBACK_URL);
+    expect(params).toEqual({
+      order_id: order.id,
+      payment_id: body.id,
+      status: 'captured',
+      signature: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
+    expect(verifyCheckoutRedirect(order.id, body.id, params.signature!, checkoutSecret)).toBe(true);
+    // A refreshed page that polls the payment gets the same redirect.
+    expect((await getPayment(order, body.id)).body.redirect_url).toBe(body.redirect_url);
+  });
+
+  it('a failed payment is sent back with status=failed, signed the same way', async () => {
+    const order = await signedOrder();
+
+    const { body } = await pay(order, upi('fail@test'));
+
+    const { params } = parseRedirect(body.redirect_url);
+    expect(params).toMatchObject({ order_id: order.id, payment_id: body.id, status: 'failed' });
+    expect(verifyCheckoutRedirect(order.id, body.id, params.signature!, checkoutSecret)).toBe(true);
+  });
+
+  it('the OTP response carries the redirect once the card payment is captured', async () => {
+    const order = await signedOrder();
+    const started = await pay(order, card(APPROVED_CARD));
+    expect(started.body).toMatchObject({ status: 'otp_required', redirect_url: null });
+
+    const done = await submitOtp(order, started.body.id);
+
+    expect(done.body.status).toBe('captured');
+    expect(parseRedirect(done.body.redirect_url).params.status).toBe('captured');
+  });
+
+  it('has no redirect while the payment is still in progress', async () => {
+    const order = await signedOrder();
+
+    const { body } = await pay(order, upi('slow@test'));
+
+    expect(body).toMatchObject({ status: 'pending', redirect_url: null });
+  });
+
+  it('has no redirect when the order has no callback_url', async () => {
+    const order = await signedOrder({});
+
+    const { body } = await pay(order, upi('success@test'));
+
+    expect(body).toMatchObject({ status: 'captured', redirect_url: null });
+  });
+
+  it("keeps the query string already in the merchant's callback_url", async () => {
+    const order = await signedOrder({ callback_url: `${CALLBACK_URL}?ref=abc` });
+
+    const { body } = await pay(order, upi('success@test'));
+
+    const { base, params } = parseRedirect(body.redirect_url);
+    expect(base).toBe(CALLBACK_URL);
+    expect(params).toMatchObject({ ref: 'abc', order_id: order.id, status: 'captured' });
   });
 });
