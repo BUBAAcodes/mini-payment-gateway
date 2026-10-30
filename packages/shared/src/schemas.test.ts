@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   amountSchema,
   createOrderSchema,
+  createWebhookEndpointSchema,
   currencySchema,
   idSchema,
   paginationSchema,
@@ -185,5 +186,32 @@ describe('submitOtpSchema', () => {
     expect(submitOtpSchema.safeParse({ otp: '' }).success).toBe(false);
     expect(submitOtpSchema.safeParse({ otp: '1'.repeat(13) }).success).toBe(false);
     expect(submitOtpSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('createWebhookEndpointSchema', () => {
+  const url = 'https://merchant.example/webhooks';
+
+  it('defaults to every event type', () => {
+    expect(createWebhookEndpointSchema.parse({ url })).toEqual({ url, event_types: ['*'] });
+  });
+
+  it('accepts a list of event types and drops duplicates', () => {
+    const parsed = createWebhookEndpointSchema.parse({
+      url,
+      event_types: ['payment.captured', 'refund.processed', 'payment.captured'],
+    });
+    expect(parsed.event_types).toEqual(['payment.captured', 'refund.processed']);
+  });
+
+  it.each([
+    ['an unknown event type', { url, event_types: ['payment.authorized'] }],
+    ['"*" mixed with other types', { url, event_types: ['*', 'ping'] }],
+    ['an empty list', { url, event_types: [] }],
+    ['a non-http URL', { url: 'ftp://merchant.example/hook' }],
+    ['a missing URL', {}],
+    ['an unknown field', { url, enabled: false }],
+  ])('rejects %s', (_name, body) => {
+    expect(createWebhookEndpointSchema.safeParse(body).success).toBe(false);
   });
 });

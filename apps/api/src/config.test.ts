@@ -70,4 +70,18 @@ describe('loadConfig', () => {
       expect(() => loadConfig({ ...validEnv, FEE_BPS: bad })).toThrow(/FEE_BPS/);
     }
   });
+
+  it('blocks private webhook URLs unless told otherwise', () => {
+    expect(loadConfig(validEnv).ALLOW_PRIVATE_WEBHOOK_URLS).toBe(false);
+    expect(
+      loadConfig({ ...validEnv, ALLOW_PRIVATE_WEBHOOK_URLS: 'true' }).ALLOW_PRIVATE_WEBHOOK_URLS,
+    ).toBe(true);
+    // z.coerce.boolean() would read "false" as true.
+    expect(
+      loadConfig({ ...validEnv, ALLOW_PRIVATE_WEBHOOK_URLS: 'false' }).ALLOW_PRIVATE_WEBHOOK_URLS,
+    ).toBe(false);
+    expect(() => loadConfig({ ...validEnv, ALLOW_PRIVATE_WEBHOOK_URLS: 'yes' })).toThrow(
+      /ALLOW_PRIVATE_WEBHOOK_URLS/,
+    );
+  });
 });

@@ -21,6 +21,12 @@ const configSchema = z.object({
   // Slow must be longer than the timeout, so slow@test exercises the "unknown" path (rule 10).
   BANK_SLOW_MS: z.coerce.number().int().min(0).default(20_000),
   BANK_TIMEOUT_MS: z.coerce.number().int().min(1).default(10_000),
+  // "true" lets webhook URLs point at private addresses (Docker services, localhost). Parsed by
+  // hand, because z.coerce.boolean() would turn the string "false" into true.
+  ALLOW_PRIVATE_WEBHOOK_URLS: z
+    .enum(['true', 'false'], { error: 'Must be "true" or "false"' })
+    .default('false')
+    .transform((value) => value === 'true'),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -28,7 +34,11 @@ export type Config = z.infer<typeof configSchema>;
 /** The settings request handlers need. Startup-only settings (port, DB URL) stay in server.ts. */
 export type AppConfig = Pick<
   Config,
-  'WEB_BASE_URL' | 'APP_ENCRYPTION_KEY' | 'FEE_BPS' | 'BANK_TIMEOUT_MS'
+  | 'WEB_BASE_URL'
+  | 'APP_ENCRYPTION_KEY'
+  | 'FEE_BPS'
+  | 'BANK_TIMEOUT_MS'
+  | 'ALLOW_PRIVATE_WEBHOOK_URLS'
 >;
 
 /** Reads config from the environment. Throws on startup instead of failing later on first use. */

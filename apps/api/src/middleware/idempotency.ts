@@ -26,6 +26,14 @@ export interface HandlerResult {
 /** Returns the response instead of sending it, so it can be saved before the caller sees it. */
 export type IdempotentHandler = (req: Request, res: Response) => Promise<HandlerResult>;
 
+export interface IdempotentOptions {
+  /**
+   * Run the handler normally when the request has no Idempotency-Key. A key that is sent is
+   * still honoured (rule 2). For POSTs where the spec doesn't demand a key.
+   */
+  optional?: boolean;
+}
+
 /** JSON with object keys sorted at every level, so field order doesn't change the hash. */
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
@@ -56,10 +64,16 @@ export function idempotent(
   db: PrismaClient,
   encryptionKey: string,
   handler: IdempotentHandler,
+  { optional = false }: IdempotentOptions = {},
 ): RequestHandler {
   return async (req, res) => {
     const merchantId = merchantIdOf(res);
     const key = req.get(KEY_HEADER);
+    if (key === undefined && optional) {
+      const result = await handler(req, res);
+      res.status(result.status).json(result.body);
+      return;
+    }
     if (key === undefined || !VALID_KEY.test(key)) {
       throw new ValidationError(
         `${KEY_HEADER} header is required: 1 to 255 visible ASCII characters`,

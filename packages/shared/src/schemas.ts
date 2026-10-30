@@ -74,3 +74,31 @@ export type PayOrderInput = z.infer<typeof payOrderSchema>;
 export const submitOtpSchema = z.strictObject({
   otp: z.string().min(1).max(12),
 });
+
+/** Every event type we send. Endpoints subscribe to some of them, or to all with "*". */
+export const WEBHOOK_EVENT_TYPES = [
+  'payment.captured',
+  'payment.failed',
+  'refund.processed',
+  'refund.failed',
+  'settlement.processed',
+  'ping',
+] as const;
+
+export type WebhookEventType = (typeof WEBHOOK_EVENT_TYPES)[number];
+
+/** POST /v1/webhook_endpoints. event_types is a list of types, or exactly ["*"] for all of them. */
+export const createWebhookEndpointSchema = z.strictObject({
+  url: httpUrlSchema,
+  event_types: z
+    .union([
+      z.tuple([z.literal('*')]),
+      z
+        .array(z.enum(WEBHOOK_EVENT_TYPES))
+        .min(1)
+        .transform((types) => [...new Set(types)]),
+    ])
+    .default(['*']),
+});
+
+export type CreateWebhookEndpointInput = z.infer<typeof createWebhookEndpointSchema>;

@@ -14,6 +14,8 @@ export const testConfig: AppConfig = {
   FEE_BPS: 200,
   // Short, so slow@test times out quickly. Every other fake bank answer in tests takes 0 ms.
   BANK_TIMEOUT_MS: 200,
+  // Test webhook receivers listen on 127.0.0.1. Tests of the SSRF checks turn this off.
+  ALLOW_PRIVATE_WEBHOOK_URLS: true,
 };
 
 export interface TestAppOptions {
@@ -21,15 +23,17 @@ export interface TestAppOptions {
   bank?: BankClient;
   /** Mounts more routes before the 404 handler. */
   extraRoutes?: (router: Router) => void;
+  /** Overrides testConfig. The encryption key stays shared, so apps can read each other's data. */
+  config?: Partial<AppConfig>;
 }
 
 /** The real app wired to the test database. */
-export function testApp(db: PrismaClient, { bank, extraRoutes }: TestAppOptions = {}) {
+export function testApp(db: PrismaClient, { bank, extraRoutes, config }: TestAppOptions = {}) {
   return createApp({
     db,
     checkDb: async () => {},
     bank: bank ?? createFakeBank(db, { normalDelayMs: 0, slowDelayMs: 60_000 }),
-    config: testConfig,
+    config: { ...testConfig, ...config },
     extraRoutes,
   });
 }

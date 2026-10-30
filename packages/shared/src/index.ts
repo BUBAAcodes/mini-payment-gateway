@@ -7,3 +7,4 @@ export * from './ids';
 export * from './money';
 export * from './schemas';
 export * from './secrets';
+export * from './webhook-signature';

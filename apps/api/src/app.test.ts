@@ -27,6 +27,7 @@ function testApp(checkDb = dbUp, logger?: Logger) {
       APP_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
       FEE_BPS: 200,
       BANK_TIMEOUT_MS: 1000,
+      ALLOW_PRIVATE_WEBHOOK_URLS: false,
     },
     // Extra routes that only exist in tests, to exercise the error handler.
     extraRoutes: (router) => {

@@ -382,17 +382,19 @@ model Event {
 }
 
 model WebhookEndpoint {
-  id             String   @id
-  merchantId     String   @map("merchant_id")
+  id             String    @id
+  merchantId     String    @map("merchant_id")
   url            String
   /// AES-256-GCM ciphertext of the whsec_ signing secret.
   secret         String
   /// Subscribed event types, or ["*"] for all.
-  eventTypes     String[] @map("event_types")
-  enabled        Boolean  @default(true)
-  disabledReason String?  @map("disabled_reason")
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  eventTypes     String[]  @map("event_types")
+  enabled        Boolean   @default(true)
+  disabledReason String?   @map("disabled_reason")
+  /// Set by DELETE. Deleted endpoints are hidden and get no deliveries; their history stays.
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   merchant   Merchant          @relation(fields: [merchantId], references: [id])
   deliveries WebhookDelivery[]
