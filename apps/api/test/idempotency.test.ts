@@ -15,30 +15,32 @@ let flakyCalls = 0;
 beforeAll(() => {
   db = testPrisma();
   // Test-only routes, to reach outcomes the orders route can't produce on demand.
-  app = testApp(db, (router) => {
-    const key = testConfig.APP_ENCRYPTION_KEY;
-    router.post(
-      '/test/echo',
-      requireApiKey(db),
-      idempotent(db, key, async (req) => ({ status: 200, body: { echo: req.body } })),
-    );
-    router.post(
-      '/test/invalid-state',
-      requireApiKey(db),
-      idempotent(db, key, async () => {
-        throw new InvalidStateError('Payment is not captured');
-      }),
-    );
-    // Crashes on the first call only, like a database blip.
-    router.post(
-      '/test/flaky',
-      requireApiKey(db),
-      idempotent(db, key, async () => {
-        flakyCalls += 1;
-        if (flakyCalls === 1) throw new Error('connection reset');
-        return { status: 201, body: { attempt: flakyCalls } };
-      }),
-    );
+  app = testApp(db, {
+    extraRoutes: (router) => {
+      const key = testConfig.APP_ENCRYPTION_KEY;
+      router.post(
+        '/test/echo',
+        requireApiKey(db),
+        idempotent(db, key, async (req) => ({ status: 200, body: { echo: req.body } })),
+      );
+      router.post(
+        '/test/invalid-state',
+        requireApiKey(db),
+        idempotent(db, key, async () => {
+          throw new InvalidStateError('Payment is not captured');
+        }),
+      );
+      // Crashes on the first call only, like a database blip.
+      router.post(
+        '/test/flaky',
+        requireApiKey(db),
+        idempotent(db, key, async () => {
+          flakyCalls += 1;
+          if (flakyCalls === 1) throw new Error('connection reset');
+          return { status: 201, body: { attempt: flakyCalls } };
+        }),
+      );
+    },
   });
 });
 

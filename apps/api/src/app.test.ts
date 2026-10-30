@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { NotFoundError } from '@gateway/shared';
 import { createPrismaClient } from '@gateway/db';
+import type { Logger } from 'pino';
 import { createApp } from './app';
+import { createFakeBank } from './fake-bank';
+import { createLogger } from './logger';
 
 const dbUp = async () => {};
 const dbDown = async () => {
@@ -13,13 +16,17 @@ const dbDown = async () => {
 // These tests never reach the database; the client connects lazily, so it never tries.
 const db = createPrismaClient('postgresql://localhost/unused');
 
-function testApp(checkDb = dbUp) {
+function testApp(checkDb = dbUp, logger?: Logger) {
   return createApp({
     db,
     checkDb,
+    bank: createFakeBank(db, { slowDelayMs: 0 }),
+    logger,
     config: {
       WEB_BASE_URL: 'https://web.test',
       APP_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
+      FEE_BPS: 200,
+      BANK_TIMEOUT_MS: 1000,
     },
     // Extra routes that only exist in tests, to exercise the error handler.
     extraRoutes: (router) => {
@@ -79,6 +86,21 @@ describe('request IDs', () => {
   it('puts the request ID on error responses too', async () => {
     const res = await request(testApp()).get('/nope').set('X-Request-Id', 'trace-1');
     expect(res.headers['x-request-id']).toBe('trace-1');
+  });
+});
+
+describe('logging', () => {
+  it('never writes the checkout client secret to the logs', async () => {
+    const lines: string[] = [];
+    const logger = createLogger('info', { write: (line: string) => lines.push(line) });
+
+    // An invalid order ID is refused before any database lookup.
+    const res = await request(testApp(dbUp, logger)).get('/checkout/orders/nope?cs=cs_topsecret');
+
+    expect(res.status).toBe(404);
+    const logged = lines.join('');
+    expect(logged).toContain('/checkout/orders/nope?cs=[redacted]');
+    expect(logged).not.toContain('cs_topsecret');
   });
 });
 

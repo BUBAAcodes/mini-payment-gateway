@@ -5,15 +5,21 @@ import { z } from 'zod';
 import { amountSchema } from '@gateway/shared';
 import { createPrismaClient } from '@gateway/db';
 import { createApp } from '../app';
+import { createFakeBank } from '../fake-bank';
 import { validate } from './validate';
 
+// Never queried: these routes don't touch the database, and the client connects lazily.
+const db = createPrismaClient('postgresql://localhost/unused');
+
 const app = createApp({
-  // Never queried: these routes don't touch the database, and the client connects lazily.
-  db: createPrismaClient('postgresql://localhost/unused'),
+  db,
   checkDb: async () => {},
+  bank: createFakeBank(db, { slowDelayMs: 0 }),
   config: {
     WEB_BASE_URL: 'https://web.test',
     APP_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
+    FEE_BPS: 200,
+    BANK_TIMEOUT_MS: 1000,
   },
   extraRoutes: (router) => {
     router.post(

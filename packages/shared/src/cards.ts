@@ -32,3 +32,9 @@ export function cardNetwork(cardNumber: string): CardNetwork {
 export function cardLast4(cardNumber: string): string {
   return cardNumber.slice(-4);
 }
+
+/** A card is good through the last day of its expiry month (UTC). */
+export function isCardExpired(expiryMonth: number, expiryYear: number, now = new Date()): boolean {
+  const year = now.getUTCFullYear();
+  return expiryYear < year || (expiryYear === year && expiryMonth < now.getUTCMonth() + 1);
+}

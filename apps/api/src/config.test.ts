@@ -58,4 +58,16 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...validEnv, BANK_TIMEOUT_MS: '-1' })).toThrow(/BANK_TIMEOUT_MS/);
     expect(() => loadConfig({ ...validEnv, BANK_SLOW_MS: 'soon' })).toThrow(/BANK_SLOW_MS/);
   });
+
+  it('defaults FEE_BPS to 200 (2%)', () => {
+    expect(loadConfig(validEnv).FEE_BPS).toBe(200);
+  });
+
+  it('reads FEE_BPS as whole basis points from 0 to 10000', () => {
+    expect(loadConfig({ ...validEnv, FEE_BPS: '150' }).FEE_BPS).toBe(150);
+    expect(loadConfig({ ...validEnv, FEE_BPS: '0' }).FEE_BPS).toBe(0);
+    for (const bad of ['-1', '10001', '1.5', 'two']) {
+      expect(() => loadConfig({ ...validEnv, FEE_BPS: bad })).toThrow(/FEE_BPS/);
+    }
+  });
 });

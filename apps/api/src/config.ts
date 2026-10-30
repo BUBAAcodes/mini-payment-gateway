@@ -15,6 +15,8 @@ const configSchema = z.object({
   WEB_BASE_URL: z
     .url({ protocol: /^https?$/, error: 'Must be an http or https URL' })
     .default('http://localhost:3000'),
+  // Our fee in basis points: 200 = 2%. Whole numbers only, so fees stay in integer paise.
+  FEE_BPS: z.coerce.number().int().min(0).max(10_000).default(200),
   // slow@test answers after BANK_SLOW_MS; we stop waiting for the bank after BANK_TIMEOUT_MS.
   // Slow must be longer than the timeout, so slow@test exercises the "unknown" path (rule 10).
   BANK_SLOW_MS: z.coerce.number().int().min(0).default(20_000),
@@ -24,7 +26,10 @@ const configSchema = z.object({
 export type Config = z.infer<typeof configSchema>;
 
 /** The settings request handlers need. Startup-only settings (port, DB URL) stay in server.ts. */
-export type AppConfig = Pick<Config, 'WEB_BASE_URL' | 'APP_ENCRYPTION_KEY'>;
+export type AppConfig = Pick<
+  Config,
+  'WEB_BASE_URL' | 'APP_ENCRYPTION_KEY' | 'FEE_BPS' | 'BANK_TIMEOUT_MS'
+>;
 
 /** Reads config from the environment. Throws on startup instead of failing later on first use. */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {

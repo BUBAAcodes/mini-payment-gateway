@@ -5,6 +5,8 @@ import {
   currencySchema,
   idSchema,
   paginationSchema,
+  payOrderSchema,
+  submitOtpSchema,
 } from './schemas';
 import { newId } from './ids';
 
@@ -98,5 +100,90 @@ describe('createOrderSchema', () => {
     const result = createOrderSchema.safeParse(body);
     expect(result.success).toBe(false);
     expect(result.error?.issues[0]?.path.join('.')).toBe(field);
+  });
+});
+
+describe('payOrderSchema', () => {
+  const now = new Date();
+  const card = {
+    number: '4111 1111 1111 1111',
+    expiry_month: 12,
+    expiry_year: now.getUTCFullYear() + 1,
+    name: 'Test Customer',
+  };
+
+  it('accepts a UPI payment', () => {
+    expect(payOrderSchema.parse({ method: 'upi', vpa: ' success@test ' })).toEqual({
+      method: 'upi',
+      vpa: 'success@test',
+    });
+  });
+
+  it('rejects a VPA that is not name@handle', () => {
+    for (const vpa of ['', 'success', '@test', 'success@', 'a b@test']) {
+      expect(payOrderSchema.safeParse({ method: 'upi', vpa }).success).toBe(false);
+    }
+  });
+
+  it('accepts a card payment and drops the spaces from the number', () => {
+    expect(payOrderSchema.parse({ method: 'card', card })).toEqual({
+      method: 'card',
+      card: { ...card, number: '4111111111111111' },
+    });
+  });
+
+  it.each([
+    ['fails the Luhn check', '4111111111111112'],
+    ['is too short', '4111'],
+    ['has letters', '4111abcd11111111'],
+  ])('rejects a card number that %s', (_name, number) => {
+    const result = payOrderSchema.safeParse({ method: 'card', card: { ...card, number } });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual(['card', 'number']);
+  });
+
+  it('never puts the card number in an error (rule 9)', () => {
+    const number = '4111111111111112';
+    const result = payOrderSchema.safeParse({ method: 'card', card: { ...card, number } });
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result.error?.issues)).not.toContain(number);
+    expect(result.error?.message).not.toContain(number);
+  });
+
+  it('rejects an expired card', () => {
+    const result = payOrderSchema.safeParse({
+      method: 'card',
+      card: { ...card, expiry_month: 1, expiry_year: 2020 },
+    });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe('Card has expired');
+  });
+
+  it('accepts a card until the end of its expiry month', () => {
+    const thisMonth = {
+      ...card,
+      expiry_month: now.getUTCMonth() + 1,
+      expiry_year: now.getUTCFullYear(),
+    };
+    expect(payOrderSchema.safeParse({ method: 'card', card: thisMonth }).success).toBe(true);
+  });
+
+  it('rejects an unknown method, extra fields and a missing card name', () => {
+    expect(payOrderSchema.safeParse({ method: 'netbanking' }).success).toBe(false);
+    expect(payOrderSchema.safeParse({ method: 'upi', vpa: 'a@b', amount: 1 }).success).toBe(false);
+    const { name: _, ...noName } = card;
+    expect(payOrderSchema.safeParse({ method: 'card', card: noName }).success).toBe(false);
+  });
+});
+
+describe('submitOtpSchema', () => {
+  it('passes any short OTP on, so the bank decides whether it is right', () => {
+    expect(submitOtpSchema.parse({ otp: '000000' })).toEqual({ otp: '000000' });
+  });
+
+  it('rejects an empty or overlong OTP', () => {
+    expect(submitOtpSchema.safeParse({ otp: '' }).success).toBe(false);
+    expect(submitOtpSchema.safeParse({ otp: '1'.repeat(13) }).success).toBe(false);
+    expect(submitOtpSchema.safeParse({}).success).toBe(false);
   });
 });

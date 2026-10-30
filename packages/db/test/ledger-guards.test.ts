@@ -13,8 +13,8 @@ beforeAll(async () => {
   clearing = await systemAccount(prisma, 'gateway_clearing');
   feeRevenue = await systemAccount(prisma, 'fee_revenue');
   const merchant = await createMerchant(prisma);
-  merchantBalance = await prisma.ledgerAccount.create({
-    data: { code: `merchant_balance:${merchant.id}`, type: 'liability', merchantId: merchant.id },
+  merchantBalance = await prisma.ledgerAccount.findUniqueOrThrow({
+    where: { code: `merchant_balance:${merchant.id}` },
   });
 });
 

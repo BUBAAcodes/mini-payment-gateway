@@ -12,9 +12,16 @@ export function testPrisma(): PrismaClient {
   return createPrismaClient(inject('databaseUrl'));
 }
 
+/** A merchant and its merchant_balance:{id} ledger account, created together as the seed does. */
 export async function createMerchant(prisma: PrismaClient) {
+  const id = newId('mer');
   return prisma.merchant.create({
-    data: { id: newId('mer'), name: 'Test Merchant', checkoutSigningSecret: 'v1:test' },
+    data: {
+      id,
+      name: 'Test Merchant',
+      checkoutSigningSecret: 'v1:test',
+      ledgerAccounts: { create: { code: `merchant_balance:${id}`, type: 'liability' } },
+    },
   });
 }
 
