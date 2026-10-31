@@ -210,6 +210,25 @@ export const reconciliationIssueResponseSchema = z
   })
   .meta({ id: 'ReconciliationIssue' });
 
+/**
+ * The dashboard overview. "Today" is the calendar day in India (decision 0005); every number
+ * counts the payment attempts created that day.
+ */
+export const dashboardOverviewResponseSchema = z
+  .object({
+    today: z.object({
+      date: z.string().meta({ example: '2026-10-30', description: 'The day in IST' }),
+      volume: paise.meta({ description: 'Captured today, before refunds and fees' }),
+      captured_count: z.number().int().meta({ description: 'Captured, or since refunded' }),
+      failed_count: z.number().int(),
+      success_rate: z.number().min(0).max(1).nullable().meta({
+        description: 'captured ÷ (captured + failed); null when nothing has finished today',
+      }),
+    }),
+    currency,
+  })
+  .meta({ id: 'DashboardOverview' });
+
 export const checkoutOrderResponseSchema = z
   .object({
     id: z.string(),
@@ -265,5 +284,6 @@ export type MerchantResponse = z.output<typeof merchantResponseSchema>;
 export type ApiKeyResponse = z.output<typeof apiKeyResponseSchema>;
 export type CreatedApiKeyResponse = z.output<typeof createdApiKeyResponseSchema>;
 export type ReconciliationIssueResponse = z.output<typeof reconciliationIssueResponseSchema>;
+export type DashboardOverviewResponse = z.output<typeof dashboardOverviewResponseSchema>;
 export type CheckoutOrderResponse = z.output<typeof checkoutOrderResponseSchema>;
 export type CheckoutPaymentResponse = z.output<typeof checkoutPaymentResponseSchema>;

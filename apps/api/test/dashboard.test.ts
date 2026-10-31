@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { PrismaClient } from '@gateway/db';
 import { createOrder, createPayment, testPrisma } from '@gateway/db/testing';
 import { newId } from '@gateway/shared';
+import { getDashboardOverview } from '../src/services/overview';
 import { merchantWithKey, newCheckoutOrder, testApp, testConfig } from './helpers';
 
 // The dashboard API: the Next.js server calls it with DASHBOARD_SERVICE_TOKEN and the merchant ID
@@ -323,5 +324,96 @@ describe('reconciliation issues', () => {
     });
     const res = await asDashboard('get', '/reconciliation_issues', a.merchant.id);
     expect(res.body.data).toEqual([]);
+  });
+});
+
+describe('overview', () => {
+  // 2026-10-30 in India runs from 2026-10-29T18:30Z to 2026-10-30T18:30Z.
+  const NOW = new Date('2026-10-30T12:00:00.000Z');
+
+  /** A payment for `merchantId`, created at `createdAt`, in `status`. */
+  async function paymentAt(
+    merchantId: string,
+    createdAt: string,
+    status: 'captured' | 'refunded' | 'failed' | 'pending',
+    amount = 50_000,
+  ) {
+    const order = await createOrder(db, merchantId, amount);
+    const payment = await createPayment(db, order, status);
+    await db.payment.update({
+      where: { id: payment.id },
+      data: { createdAt: new Date(createdAt) },
+    });
+  }
+
+  it('counts only payments created today in India', async () => {
+    await paymentAt(a.merchant.id, '2026-10-29T18:29:59.999Z', 'captured'); // 23:59 IST yesterday
+    await paymentAt(a.merchant.id, '2026-10-29T18:31:00.000Z', 'captured', 20_000); // 00:01 IST
+    await paymentAt(a.merchant.id, '2026-10-30T18:29:00.000Z', 'captured', 30_000); // 23:59 IST
+    await paymentAt(a.merchant.id, '2026-10-30T18:30:00.000Z', 'captured'); // 00:00 IST tomorrow
+
+    const overview = await getDashboardOverview(db, a.merchant.id, NOW);
+    expect(overview).toEqual({
+      today: {
+        date: '2026-10-30',
+        volume: 50_000,
+        captured_count: 2,
+        failed_count: 0,
+        success_rate: 1,
+      },
+      currency: 'INR',
+    });
+  });
+
+  it('counts refunded payments as successes and leaves in-progress ones out of the rate', async () => {
+    await paymentAt(a.merchant.id, '2026-10-30T05:00:00.000Z', 'captured', 10_000);
+    await paymentAt(a.merchant.id, '2026-10-30T05:01:00.000Z', 'refunded', 20_000);
+    await paymentAt(a.merchant.id, '2026-10-30T05:02:00.000Z', 'failed', 40_000);
+    await paymentAt(a.merchant.id, '2026-10-30T05:03:00.000Z', 'failed', 40_000);
+    await paymentAt(a.merchant.id, '2026-10-30T05:04:00.000Z', 'pending', 80_000);
+
+    const { today } = await getDashboardOverview(db, a.merchant.id, NOW);
+    expect(today).toMatchObject({
+      volume: 30_000,
+      captured_count: 2,
+      failed_count: 2,
+      success_rate: 0.5,
+    });
+  });
+
+  it('has no success rate when nothing has finished today', async () => {
+    await paymentAt(a.merchant.id, '2026-10-30T05:00:00.000Z', 'pending');
+
+    const { today } = await getDashboardOverview(db, a.merchant.id, NOW);
+    expect(today).toMatchObject({
+      volume: 0,
+      captured_count: 0,
+      failed_count: 0,
+      success_rate: null,
+    });
+  });
+
+  it("never counts another merchant's payments", async () => {
+    await paymentAt(b.merchant.id, '2026-10-30T05:00:00.000Z', 'captured');
+    await paymentAt(b.merchant.id, '2026-10-30T05:01:00.000Z', 'failed');
+
+    const { today } = await getDashboardOverview(db, a.merchant.id, NOW);
+    expect(today).toMatchObject({ volume: 0, captured_count: 0, failed_count: 0 });
+  });
+
+  it('is served at /dashboard/overview for the session merchant, with the service token', async () => {
+    await capturedPayment(a.apiKey.key);
+
+    const res = await asDashboard('get', '/overview', a.merchant.id);
+    expect(res.status).toBe(200);
+    expect(res.body.today).toMatchObject({ volume: 50_000, captured_count: 1, success_rate: 1 });
+
+    const other = await asDashboard('get', '/overview', b.merchant.id);
+    expect(other.body.today).toMatchObject({ volume: 0, captured_count: 0 });
+
+    const noToken = await request(app)
+      .get('/dashboard/overview')
+      .set('X-Merchant-Id', a.merchant.id);
+    expect(noToken.status).toBe(401);
   });
 });

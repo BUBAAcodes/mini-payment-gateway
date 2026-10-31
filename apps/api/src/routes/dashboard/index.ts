@@ -14,6 +14,7 @@ import type { BankClient } from '../../fake-bank';
 import { merchantIdOf, requireDashboardService } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { apiKeyResource, createApiKey, listApiKeys, revokeApiKey } from '../../services/api-keys';
+import { getDashboardOverview } from '../../services/overview';
 import {
   listReconciliationIssues,
   reconciliationIssueResource,
@@ -61,6 +62,10 @@ export function dashboardRouter({ db, bank, config }: DashboardRouterDeps): Rout
       created_at: merchant.createdAt.toISOString(),
     };
     res.json(body);
+  });
+
+  router.get('/overview', async (_req, res) => {
+    res.json(await getDashboardOverview(db, merchantIdOf(res)));
   });
 
   router.get('/api_keys', validate({ query: paginationSchema }), async (_req, res) => {

@@ -1,13 +1,20 @@
+import Link from 'next/link';
 import { Suspense } from 'react';
 import { formatINR } from '@gateway/shared';
 import { Eyebrow } from '@/components/checkout/ui';
-import { getBalance, getMerchant } from '@/lib/dashboard-api';
+import { EmptyState, LoadError, PageHeader } from '@/components/dashboard/page-header';
+import { Button } from '@/components/ui/button';
+import { getBalance, getMerchant, getOverview, listPayments } from '@/lib/dashboard-api';
+import { formatPercent } from '@/lib/dashboard-format';
 import { requireMerchant } from '@/lib/session';
+import { cn } from '@/lib/utils';
+import { LoadingText } from '@/components/dashboard/loading-text';
+import { PaymentsTable } from '@/components/dashboard/payments-table';
 
-/** Overview. Step 20 adds volume, success rate and the other pages. */
+/** Overview: what we owe the merchant, and how today is going. */
 export default function DashboardPage() {
   return (
-    <Suspense fallback={<p className="text-muted-foreground">Loading…</p>}>
+    <Suspense fallback={<LoadingText />}>
       <Overview />
     </Suspense>
   );
@@ -16,39 +23,101 @@ export default function DashboardPage() {
 async function Overview() {
   // The merchant ID comes from the session, and only from there.
   const { merchantId } = await requireMerchant();
-  const [merchant, balance] = await Promise.all([getMerchant(merchantId), getBalance(merchantId)]);
+  const [merchant, balance, overview, recent] = await Promise.all([
+    getMerchant(merchantId),
+    getBalance(merchantId),
+    getOverview(merchantId),
+    listPayments(merchantId, { limit: 5 }),
+  ]);
 
-  if (!merchant.ok || !balance.ok) {
-    const error = merchant.ok ? (balance.ok ? null : balance.error) : merchant.error;
-    return (
-      <p role="alert" className="text-destructive">
-        {error?.message}
-      </p>
-    );
-  }
+  if (!merchant.ok) return <LoadError message={merchant.error.message} />;
 
   return (
-    <section className="space-y-8">
-      <div>
-        <Eyebrow>Merchant</Eyebrow>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">{merchant.data.name}</h1>
-      </div>
-      <div className="rounded-card bg-card p-6">
-        <Eyebrow>Unsettled balance</Eyebrow>
-        <p
-          className={
-            balance.data.balance < 0
-              ? 'mt-2 text-4xl font-semibold text-destructive'
-              : 'mt-2 text-4xl font-semibold'
+    <section>
+      <PageHeader eyebrow="Merchant" title={merchant.data.name} />
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Stat
+          label="Unsettled balance"
+          note="What we owe you and have not paid out yet. Negative when refunds since the last settlement are more than new payments."
+        >
+          {balance.ok ? (
+            <span className={cn(balance.data.balance < 0 && 'text-destructive')}>
+              {formatINR(balance.data.balance)}
+            </span>
+          ) : (
+            <Unavailable message={balance.error.message} />
+          )}
+        </Stat>
+        <Stat
+          label="Today's volume"
+          note={
+            overview.ok
+              ? `Captured on ${overview.data.today.date} (India time), before refunds and fees.`
+              : undefined
           }
         >
-          {formatINR(balance.data.balance)}
-        </p>
-        <p className="mt-2 text-sm text-muted-foreground">
-          What we owe you and have not paid out yet. Negative when refunds since the last settlement
-          are more than new payments.
-        </p>
+          {overview.ok ? (
+            formatINR(overview.data.today.volume)
+          ) : (
+            <Unavailable message={overview.error.message} />
+          )}
+        </Stat>
+        <Stat
+          label="Success rate today"
+          note={
+            overview.ok
+              ? `${overview.data.today.captured_count} captured, ${overview.data.today.failed_count} failed. Payments still with the bank don't count yet.`
+              : undefined
+          }
+        >
+          {overview.ok ? (
+            formatPercent(overview.data.today.success_rate)
+          ) : (
+            <Unavailable message={overview.error.message} />
+          )}
+        </Stat>
       </div>
+
+      <div className="mt-12 mb-4 flex items-end justify-between gap-4">
+        <h2 className="font-display text-xl uppercase">Latest payments</h2>
+        <Button asChild variant="outline" size="sm">
+          <Link href="/dashboard/payments">All payments</Link>
+        </Button>
+      </div>
+      {!recent.ok ? (
+        <LoadError message={recent.error.message} />
+      ) : recent.data.data.length === 0 ? (
+        <EmptyState>No payments yet. Buy something on the demo store to see one here.</EmptyState>
+      ) : (
+        <PaymentsTable payments={recent.data.data} />
+      )}
     </section>
+  );
+}
+
+function Stat({
+  label,
+  note,
+  children,
+}: {
+  label: string;
+  note?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-card bg-card p-6">
+      <Eyebrow>{label}</Eyebrow>
+      <p className="mt-2 text-4xl font-semibold tabular-nums">{children}</p>
+      {note && <p className="mt-2 text-sm text-muted-foreground">{note}</p>}
+    </div>
+  );
+}
+
+function Unavailable({ message }: { message: string }) {
+  return (
+    <span role="alert" className="text-base font-normal text-destructive">
+      {message}
+    </span>
   );
 }

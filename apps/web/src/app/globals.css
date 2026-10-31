@@ -2,8 +2,8 @@
 
 /*
  * Store theme, after the Blackout reference (https://blackoutt.framer.website/): white, black,
- * two greys, uppercase Inter Display headings. Variable names follow shadcn/ui, so `shadcn init`
- * (step 20) picks them up as they are.
+ * two greys, uppercase Inter Display headings. Variable names follow shadcn/ui, so the components
+ * in src/components/ui use them as they are.
  */
 :root {
   --background: #ffffff;
@@ -14,6 +14,10 @@
   --primary-foreground: #ffffff;
   --muted: #ededed;
   --muted-foreground: #757575;
+  --secondary: #ededed;
+  --secondary-foreground: #000000;
+  --accent: #f6f6f6;
+  --accent-foreground: #000000;
   --border: rgb(0 0 0 / 0.2);
   --input: rgb(0 0 0 / 0.2);
   --ring: #000000;
@@ -37,6 +41,10 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -49,6 +57,12 @@
   --radius-control: var(--radius);
   --radius-card: 10px;
   --radius-otp: 12px;
+  /* shadcn/ui's scale, on the reference's sizes: 2px size chips, 6px controls, 10px cards. */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: var(--radius);
+  --radius-lg: 10px;
+  --radius-xl: 10px;
 
   --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
   --font-pill: var(--font-instrument-sans), var(--font-inter), system-ui, sans-serif;
@@ -97,6 +111,15 @@
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+}
+
+/* Tailwind v4 borders default to currentColor (black here); the reference's hairlines are grey. */
+@layer base {
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-border);
   }
 }
 
