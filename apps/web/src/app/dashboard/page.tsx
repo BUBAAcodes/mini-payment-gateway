@@ -8,13 +8,14 @@ import { getBalance, getMerchant, getOverview, listPayments } from '@/lib/dashbo
 import { formatPercent } from '@/lib/dashboard-format';
 import { requireMerchant } from '@/lib/session';
 import { cn } from '@/lib/utils';
-import { LoadingText } from '@/components/dashboard/loading-text';
+import { OverviewSkeleton } from '@/components/dashboard/skeletons';
+import { VolumeChart } from '@/components/dashboard/volume-chart';
 import { PaymentsTable } from '@/components/dashboard/payments-table';
 
 /** Overview: what we owe the merchant, and how today is going. */
 export default function DashboardPage() {
   return (
-    <Suspense fallback={<LoadingText />}>
+    <Suspense fallback={<OverviewSkeleton />}>
       <Overview />
     </Suspense>
   );
@@ -78,6 +79,19 @@ async function Overview() {
           )}
         </Stat>
       </div>
+
+      {overview.ok && (
+        <div className="mt-4 rounded-card border border-border p-6">
+          <div className="mb-6 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="font-display text-lg uppercase">Captured, last 7 days</h2>
+            <p className="text-sm text-muted-foreground">
+              {formatINR(overview.data.last_7_days.reduce((sum, d) => sum + d.volume, 0))} in total
+              · India time
+            </p>
+          </div>
+          <VolumeChart days={overview.data.last_7_days} today={overview.data.today.date} />
+        </div>
+      )}
 
       <div className="mt-12 mb-4 flex items-end justify-between gap-4">
         <h2 className="font-display text-xl uppercase">Latest payments</h2>

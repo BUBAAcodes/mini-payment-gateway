@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import { ActionButton } from '@/components/dashboard/action-button';
 import { CreateKeyForm } from '@/components/dashboard/create-key-form';
-import { LoadingText } from '@/components/dashboard/loading-text';
+import { TableSkeleton } from '@/components/dashboard/skeletons';
 import { EmptyState, LoadError, PageHeader } from '@/components/dashboard/page-header';
 import { StatusBadge } from '@/components/dashboard/status-badge';
 import {
@@ -26,7 +26,7 @@ export default function ApiKeysPage() {
         a new key is shown once.
       </PageHeader>
       <CreateKeyForm action={createKey} />
-      <Suspense fallback={<LoadingText />}>
+      <Suspense fallback={<TableSkeleton rows={3} />}>
         <Keys />
       </Suspense>
     </section>

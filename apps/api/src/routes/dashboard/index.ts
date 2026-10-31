@@ -15,6 +15,7 @@ import { merchantIdOf, requireDashboardService } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { apiKeyResource, createApiKey, listApiKeys, revokeApiKey } from '../../services/api-keys';
 import { getDashboardOverview } from '../../services/overview';
+import { getPaymentActivity } from '../../services/payment-activity';
 import {
   listReconciliationIssues,
   reconciliationIssueResource,
@@ -66,6 +67,10 @@ export function dashboardRouter({ db, bank, config }: DashboardRouterDeps): Rout
 
   router.get('/overview', async (_req, res) => {
     res.json(await getDashboardOverview(db, merchantIdOf(res)));
+  });
+
+  router.get('/payments/:id/activity', async (req, res) => {
+    res.json(await getPaymentActivity(db, merchantIdOf(res), req.params.id));
   });
 
   router.get('/api_keys', validate({ query: paginationSchema }), async (_req, res) => {

@@ -225,9 +225,26 @@ export const dashboardOverviewResponseSchema = z
         description: 'captured ÷ (captured + failed); null when nothing has finished today',
       }),
     }),
+    last_7_days: z
+      .array(
+        z.object({
+          date: z.string().meta({ example: '2026-10-30' }),
+          volume: paise,
+          captured_count: z.number().int(),
+        }),
+      )
+      .meta({ description: 'The last 7 days in IST, oldest first; days with nothing are 0' }),
     currency,
   })
   .meta({ id: 'DashboardOverview' });
+
+/** A payment's refunds and the webhook events about it, for the dashboard's payment page. */
+export const paymentActivityResponseSchema = z
+  .object({
+    refunds: z.array(refundResponseSchema),
+    events: z.array(eventResponseSchema),
+  })
+  .meta({ id: 'PaymentActivity' });
 
 export const checkoutOrderResponseSchema = z
   .object({
@@ -285,5 +302,6 @@ export type ApiKeyResponse = z.output<typeof apiKeyResponseSchema>;
 export type CreatedApiKeyResponse = z.output<typeof createdApiKeyResponseSchema>;
 export type ReconciliationIssueResponse = z.output<typeof reconciliationIssueResponseSchema>;
 export type DashboardOverviewResponse = z.output<typeof dashboardOverviewResponseSchema>;
+export type PaymentActivityResponse = z.output<typeof paymentActivityResponseSchema>;
 export type CheckoutOrderResponse = z.output<typeof checkoutOrderResponseSchema>;
 export type CheckoutPaymentResponse = z.output<typeof checkoutPaymentResponseSchema>;

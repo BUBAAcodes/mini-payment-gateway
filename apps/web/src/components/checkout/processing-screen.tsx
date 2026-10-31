@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useEffectEvent } from 'react';
+import { Landmark } from 'lucide-react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import { refreshPayment } from '@/app/pay/[orderId]/actions';
 import { paymentMethodLabel, screenFor, type CheckoutPayment } from '@/lib/checkout';
 import type { CheckoutOrderView } from './checkout-flow';
-import { SCREEN_HEADING_ID, Spinner } from './ui';
+import { SCREEN_HEADING_ID } from './ui';
 
 const POLL_INTERVAL_MS = 2_000;
 
@@ -40,7 +41,20 @@ export function ProcessingScreen({ order, payment, onResult }: ProcessingScreenP
 
   return (
     <section aria-labelledby={SCREEN_HEADING_ID} className="rounded-card bg-card p-6 md:p-8">
-      <Spinner className="size-8" />
+      <div className="relative flex size-14 items-center justify-center">
+        {/* Two rings ripple out while we wait; the global reduced-motion rule stills them. */}
+        <span
+          aria-hidden="true"
+          className="absolute inset-0 animate-ping rounded-full bg-foreground/10 [animation-duration:2s]"
+        />
+        <span
+          aria-hidden="true"
+          className="absolute inset-0 animate-ping rounded-full bg-foreground/10 [animation-delay:1s] [animation-duration:2s]"
+        />
+        <span className="relative flex size-14 items-center justify-center rounded-full bg-foreground text-background">
+          <Landmark aria-hidden="true" className="size-6" />
+        </span>
+      </div>
       <h2
         id={SCREEN_HEADING_ID}
         tabIndex={-1}
@@ -51,9 +65,25 @@ export function ProcessingScreen({ order, payment, onResult }: ProcessingScreenP
       <p className="mt-3 text-muted-foreground">
         Some banks take a while to answer. Keep this page open; it updates as soon as yours does.
       </p>
-      <p role="status" className="mt-6 text-sm font-medium">
-        {paymentMethodLabel(payment)}
-      </p>
+      <div className="mt-6 flex items-center justify-between gap-4 text-sm">
+        <p className="font-medium">{paymentMethodLabel(payment)}</p>
+        <Elapsed />
+      </div>
     </section>
+  );
+}
+
+/** Seconds since this screen opened, so a slow bank doesn't look like a frozen page. */
+function Elapsed() {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const startedAt = Date.now();
+    const tick = setInterval(() => setSeconds(Math.floor((Date.now() - startedAt) / 1000)), 1000);
+    return () => clearInterval(tick);
+  }, []);
+  return (
+    <p className="text-muted-foreground tabular-nums" aria-live="off">
+      Waiting {seconds}s
+    </p>
   );
 }

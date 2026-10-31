@@ -6,6 +6,7 @@ import {
   otpDigits,
   parseExpiry,
   paymentMethodLabel,
+  progressSteps,
   screenFor,
   type PaymentStatus,
 } from './checkout';
@@ -100,5 +101,21 @@ describe('paymentMethodLabel', () => {
     expect(paymentMethodLabel({ method: 'card', vpa: null, card_last4: '1111' })).toBe(
       'Card •••• 1111',
     );
+  });
+});
+
+describe('progressSteps', () => {
+  const states = (screen: Parameters<typeof progressSteps>[0]) =>
+    progressSteps(screen).map((step) => `${step.label}:${step.state}`);
+
+  it('walks Details → Verify → Done', () => {
+    expect(states('form')).toEqual(['Details:current', 'Verify:todo', 'Done:todo']);
+    expect(states('otp')).toEqual(['Details:done', 'Verify:current', 'Done:todo']);
+    expect(states('processing')).toEqual(['Details:done', 'Verify:current', 'Done:todo']);
+    expect(states('success')).toEqual(['Details:done', 'Verify:done', 'Done:done']);
+  });
+
+  it('marks the last step failed when the payment fails', () => {
+    expect(states('failure')).toEqual(['Details:done', 'Verify:done', 'Done:failed']);
   });
 });

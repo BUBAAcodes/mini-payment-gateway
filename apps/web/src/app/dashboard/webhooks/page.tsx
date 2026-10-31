@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Suspense } from 'react';
 import { WEBHOOK_EVENT_TYPES } from '@gateway/shared';
 import { ActionButton } from '@/components/dashboard/action-button';
-import { LoadingText } from '@/components/dashboard/loading-text';
+import { CardsSkeleton } from '@/components/dashboard/skeletons';
 import { EmptyState, LoadError, PageHeader } from '@/components/dashboard/page-header';
 import { StatusBadge } from '@/components/dashboard/status-badge';
 import { WebhookForm } from '@/components/dashboard/webhook-form';
@@ -18,7 +18,7 @@ export default function WebhooksPage() {
         We POST signed events (Standard Webhooks) to these URLs and retry for about a day if they
         fail. Check the signature with the endpoint&apos;s secret, shown once when you add it.
       </PageHeader>
-      <Suspense fallback={<LoadingText />}>
+      <Suspense fallback={<CardsSkeleton cards={2} />}>
         <Endpoints />
       </Suspense>
     </section>

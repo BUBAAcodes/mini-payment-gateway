@@ -148,6 +148,18 @@ describe('dashboard API calls', () => {
     },
   );
 
+  it("gets a payment's refunds and events", async () => {
+    await api.getPaymentActivity(MERCHANT, 'pay_1');
+    expect(sent().url).toBe('http://api.test/dashboard/payments/pay_1/activity');
+  });
+
+  it('lists events by type and delivery status, leaving out unset filters', async () => {
+    await api.listEvents(MERCHANT, { type: 'payment.captured', delivery_status: 'failed' });
+    expect(sent().url).toBe(
+      'http://api.test/dashboard/events?limit=20&type=payment.captured&delivery_status=failed',
+    );
+  });
+
   it('lists payments with only the filters that are set', async () => {
     await api.listPayments(MERCHANT, {
       status: 'captured',

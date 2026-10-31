@@ -23,9 +23,10 @@ export function statusTone(status: string): Tone {
   return TONES[status] ?? 'waiting';
 }
 
-/** "otp_required" → "otp required". */
+/** "otp_required" → "OTP required", "captured" → "Captured". */
 export function statusLabel(status: string): string {
-  return status.replaceAll('_', ' ');
+  const words = status.replaceAll('_', ' ').replace(/\botp\b/, 'OTP');
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 const dateTime = new Intl.DateTimeFormat('en-IN', {

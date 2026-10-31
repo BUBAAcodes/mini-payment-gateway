@@ -137,6 +137,17 @@ export const redeliverEventSchema = z.strictObject({
   endpoint_id: idSchema('we').optional(),
 });
 
+/**
+ * GET /v1/events: one page, optionally only one event type, and only events with at least one
+ * delivery in `delivery_status`.
+ */
+export const listEventsSchema = paginationSchema.extend({
+  type: z.enum(WEBHOOK_EVENT_TYPES).optional(),
+  delivery_status: z.enum(['pending', 'succeeded', 'failed']).optional(),
+});
+
+export type ListEventsInput = z.infer<typeof listEventsSchema>;
+
 export type RedeliverEventInput = z.infer<typeof redeliverEventSchema>;
 
 /** A calendar date like 2026-10-29. Rejects dates that don't exist, such as 2026-02-30. */

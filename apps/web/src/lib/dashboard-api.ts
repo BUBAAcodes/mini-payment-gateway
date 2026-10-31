@@ -7,6 +7,7 @@ import type {
   DashboardOverviewResponse,
   EventResponse,
   MerchantResponse,
+  PaymentActivityResponse,
   PaymentResponse,
   ReconciliationIssueResponse,
   RefundResponse,
@@ -114,6 +115,14 @@ export function getPayment(merchantId: string, paymentId: string) {
   return callDashboardApi<PaymentResponse>(merchantId, `/dashboard/payments/${segment(paymentId)}`);
 }
 
+/** The payment's refunds and the webhook events about it. */
+export function getPaymentActivity(merchantId: string, paymentId: string) {
+  return callDashboardApi<PaymentActivityResponse>(
+    merchantId,
+    `/dashboard/payments/${segment(paymentId)}/activity`,
+  );
+}
+
 /** No amount refunds whatever is left. The key makes a repeated submit a replay, not a 2nd refund. */
 export function createRefund(
   merchantId: string,
@@ -186,10 +195,16 @@ export function testWebhookEndpoint(merchantId: string, endpointId: string) {
   );
 }
 
-export function listEvents(merchantId: string, page: PageQuery) {
+export interface EventFilters extends PageQuery {
+  type?: EventResponse['type'];
+  /** Only events with at least one delivery in this state. */
+  delivery_status?: WebhookDeliveryResponse['status'];
+}
+
+export function listEvents(merchantId: string, { type, delivery_status, ...page }: EventFilters) {
   return callDashboardApi<Page<EventResponse>>(
     merchantId,
-    withQuery('/dashboard/events', pageQuery(page)),
+    withQuery('/dashboard/events', { ...pageQuery(page), type, delivery_status }),
   );
 }
 

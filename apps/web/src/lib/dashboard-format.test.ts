@@ -5,6 +5,7 @@ import {
   methodSummary,
   paymentDateRange,
   reconciliationKindLabel,
+  statusLabel,
   statusTone,
 } from './dashboard-format';
 
@@ -75,5 +76,13 @@ describe('paymentDateRange', () => {
   it('rejects dates that do not exist, and a range that ends before it starts', () => {
     expect(paymentDateRange('2026-02-30', '')).toMatchObject({ ok: false });
     expect(paymentDateRange('2026-10-30', '2026-10-29')).toMatchObject({ ok: false });
+  });
+});
+
+describe('statusLabel', () => {
+  it('writes statuses in sentence case, with OTP in capitals', () => {
+    expect(statusLabel('captured')).toBe('Captured');
+    expect(statusLabel('otp_required')).toBe('OTP required');
+    expect(statusLabel('succeeded')).toBe('Succeeded');
   });
 });

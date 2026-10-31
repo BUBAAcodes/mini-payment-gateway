@@ -1,4 +1,10 @@
-import type { Event, Prisma, PrismaClient, WebhookDelivery } from '@gateway/db';
+import type {
+  Event,
+  Prisma,
+  PrismaClient,
+  WebhookDelivery,
+  WebhookDeliveryStatus,
+} from '@gateway/db';
 import {
   InvalidStateError,
   NotFoundError,
@@ -6,6 +12,7 @@ import {
   isId,
   newId,
   type EventResponse,
+  type WebhookEventType,
 } from '@gateway/shared';
 import { olderThan, toPage, type Page } from './pagination';
 import { webhookDeliveryResource } from './webhook-delivery';
@@ -13,11 +20,20 @@ import { getWebhookEndpoint, liveEndpoints } from './webhook-endpoints';
 
 export type EventWithDeliveries = Event & { deliveries: WebhookDelivery[] };
 
-/** Newest first, each with its deliveries, oldest first. `startingAfter` is the last ID of the previous page. */
+export interface EventFilters {
+  limit: number;
+  /** The last ID of the previous page. */
+  startingAfter?: string;
+  type?: WebhookEventType;
+  /** Only events with at least one delivery in this state. */
+  deliveryStatus?: WebhookDeliveryStatus;
+}
+
+/** Newest first, each with its deliveries, oldest first. */
 export async function listEvents(
   db: PrismaClient,
   merchantId: string,
-  { limit, startingAfter }: { limit: number; startingAfter?: string },
+  { limit, startingAfter, type, deliveryStatus }: EventFilters,
 ): Promise<Page<EventWithDeliveries>> {
   let after: Prisma.EventWhereInput = {};
   if (startingAfter !== undefined) {
@@ -29,7 +45,12 @@ export async function listEvents(
   }
 
   const rows = await db.event.findMany({
-    where: { merchantId, ...after },
+    where: {
+      merchantId,
+      ...after,
+      ...(type ? { type } : {}),
+      ...(deliveryStatus ? { deliveries: { some: { status: deliveryStatus } } } : {}),
+    },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
     include: { deliveries: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] } },

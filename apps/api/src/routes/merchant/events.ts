@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import type { PrismaClient } from '@gateway/db';
-import { paginationSchema, redeliverEventSchema, type RedeliverEventInput } from '@gateway/shared';
-import type { z } from 'zod';
+import {
+  listEventsSchema,
+  redeliverEventSchema,
+  type ListEventsInput,
+  type RedeliverEventInput,
+} from '@gateway/shared';
 import type { AppConfig } from '../../config';
 import { merchantIdOf } from '../../middleware/auth';
 import { idempotent } from '../../middleware/idempotency';
@@ -12,11 +16,13 @@ import { eventResource, listEvents, redeliverEvent } from '../../services/webhoo
 export function eventsRouter(db: PrismaClient, config: AppConfig): Router {
   const router = Router();
 
-  router.get('/events', validate({ query: paginationSchema }), async (_req, res) => {
-    const query = res.locals.validated.query as z.infer<typeof paginationSchema>;
+  router.get('/events', validate({ query: listEventsSchema }), async (_req, res) => {
+    const query = res.locals.validated.query as ListEventsInput;
     const page = await listEvents(db, merchantIdOf(res), {
       limit: query.limit,
       startingAfter: query.starting_after,
+      type: query.type,
+      deliveryStatus: query.delivery_status,
     });
     res.json({ data: page.data.map(eventResource), has_more: page.has_more });
   });

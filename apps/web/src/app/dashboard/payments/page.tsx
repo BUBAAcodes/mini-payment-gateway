@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
 import type { PaymentResponse } from '@gateway/shared';
-import { LoadingText } from '@/components/dashboard/loading-text';
+import { TableSkeleton } from '@/components/dashboard/skeletons';
 import { EmptyState, LoadError, PageHeader } from '@/components/dashboard/page-header';
 import { Pager } from '@/components/dashboard/pager';
 import { PaymentsTable } from '@/components/dashboard/payments-table';
@@ -34,7 +34,7 @@ export default function PaymentsPage({ searchParams }: PageProps<'/dashboard/pay
       <PageHeader eyebrow="Payments" title="Payments">
         Every payment attempt, newest first. Open one to see its details or refund it.
       </PageHeader>
-      <Suspense fallback={<LoadingText />}>
+      <Suspense fallback={<TableSkeleton />}>
         <Payments searchParams={searchParams} />
       </Suspense>
     </section>
@@ -59,7 +59,7 @@ async function Payments({ searchParams }: Pick<PageProps<'/dashboard/payments'>,
             id="status"
             name="status"
             defaultValue={filters.status ?? ''}
-            className="h-9 rounded-md border border-input bg-background px-3 text-sm capitalize"
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
           >
             <option value="">Any status</option>
             {STATUSES.map((status) => (

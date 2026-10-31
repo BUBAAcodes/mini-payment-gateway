@@ -13,6 +13,7 @@ import {
   listPaymentsSchema,
   orderWithPaymentsResponseSchema,
   pageOf,
+  listEventsSchema,
   paginationSchema,
   payOrderSchema,
   paymentResponseSchema,
@@ -211,8 +212,10 @@ export const OPERATIONS: Operation[] = [
     operationId: 'listEvents',
     tag: 'Merchant',
     summary: 'List events, with their webhook deliveries',
+    description:
+      'Newest first. Filter by `type`, or by `delivery_status` to find events with at least one delivery in that state (e.g. `failed`).',
     auth: 'apiKey',
-    query: paginationSchema,
+    query: listEventsSchema,
     responses: { 200: { description: 'One page of events', schema: pageOf(eventResponseSchema) } },
   },
   {

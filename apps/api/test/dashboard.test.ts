@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { PrismaClient } from '@gateway/db';
 import { createOrder, createPayment, testPrisma } from '@gateway/db/testing';
 import { newId } from '@gateway/shared';
-import { getDashboardOverview } from '../src/services/overview';
+import { getDashboardOverview, lastDaysVolume } from '../src/services/overview';
 import { merchantWithKey, newCheckoutOrder, testApp, testConfig } from './helpers';
 
 // The dashboard API: the Next.js server calls it with DASHBOARD_SERVICE_TOKEN and the merchant ID
@@ -354,6 +354,7 @@ describe('overview', () => {
 
     const overview = await getDashboardOverview(db, a.merchant.id, NOW);
     expect(overview).toEqual({
+      last_7_days: expect.any(Array),
       today: {
         date: '2026-10-30',
         volume: 50_000,
@@ -415,5 +416,88 @@ describe('overview', () => {
       .get('/dashboard/overview')
       .set('X-Merchant-Id', a.merchant.id);
     expect(noToken.status).toBe(401);
+  });
+});
+
+describe('7-day volume', () => {
+  const NOW = new Date('2026-10-30T12:00:00.000Z'); // 30 Oct, 17:30 IST
+
+  async function capturedAt(
+    merchantId: string,
+    createdAt: string,
+    amount: number,
+    status = 'captured',
+  ) {
+    const order = await createOrder(db, merchantId, amount);
+    const payment = await createPayment(db, order, status as 'captured');
+    await db.payment.update({
+      where: { id: payment.id },
+      data: { createdAt: new Date(createdAt) },
+    });
+  }
+
+  it('totals captured payments per India-time day, oldest first, with empty days as 0', async () => {
+    await capturedAt(a.merchant.id, '2026-10-24T18:30:00.000Z', 10_000); // 25 Oct 00:00 IST
+    await capturedAt(a.merchant.id, '2026-10-23T18:29:59.000Z', 99_000); // 23 Oct 23:59: too old
+    await capturedAt(a.merchant.id, '2026-10-29T20:00:00.000Z', 20_000); // 30 Oct 01:30 IST
+    await capturedAt(a.merchant.id, '2026-10-30T10:00:00.000Z', 30_000, 'refunded'); // 30 Oct
+    await capturedAt(a.merchant.id, '2026-10-30T11:00:00.000Z', 40_000, 'failed'); // not volume
+    await capturedAt(b.merchant.id, '2026-10-30T11:00:00.000Z', 70_000); // other merchant
+
+    const days = await lastDaysVolume(db, a.merchant.id, NOW, 7);
+    expect(days).toEqual([
+      { date: '2026-10-24', volume: 0, captured_count: 0 },
+      { date: '2026-10-25', volume: 10_000, captured_count: 1 },
+      { date: '2026-10-26', volume: 0, captured_count: 0 },
+      { date: '2026-10-27', volume: 0, captured_count: 0 },
+      { date: '2026-10-28', volume: 0, captured_count: 0 },
+      { date: '2026-10-29', volume: 0, captured_count: 0 },
+      { date: '2026-10-30', volume: 50_000, captured_count: 2 },
+    ]);
+  });
+
+  it('comes with the overview', async () => {
+    const overview = await getDashboardOverview(db, a.merchant.id, NOW);
+    expect(overview.last_7_days).toHaveLength(7);
+    expect(overview.last_7_days.at(-1)).toEqual({
+      date: '2026-10-30',
+      volume: 0,
+      captured_count: 0,
+    });
+  });
+});
+
+describe('payment activity', () => {
+  it("lists a payment's refunds and the events about it, newest first", async () => {
+    const paymentId = await capturedPayment(a.apiKey.key);
+    const otherPaymentId = await capturedPayment(a.apiKey.key);
+    for (const amount of [10_000, 5_000]) {
+      await asDashboard('post', `/payments/${paymentId}/refunds`, a.merchant.id)
+        .set('Idempotency-Key', randomUUID())
+        .send({ amount })
+        .expect(201);
+    }
+
+    const res = await asDashboard('get', `/payments/${paymentId}/activity`, a.merchant.id).expect(
+      200,
+    );
+
+    expect(res.body.refunds.map((r: { amount: number }) => r.amount)).toEqual([5_000, 10_000]);
+    expect(res.body.refunds.every((r: { payment_id: string }) => r.payment_id === paymentId)).toBe(
+      true,
+    );
+    expect(res.body.events.map((e: { type: string }) => e.type)).toEqual([
+      'refund.processed',
+      'refund.processed',
+      'payment.captured',
+    ]);
+    expect(res.body.events[0]).toHaveProperty('deliveries');
+    const ids = JSON.stringify(res.body);
+    expect(ids).not.toContain(otherPaymentId);
+  });
+
+  it("returns 404 for another merchant's payment", async () => {
+    const paymentId = await capturedPayment(a.apiKey.key);
+    await asDashboard('get', `/payments/${paymentId}/activity`, b.merchant.id).expect(404);
   });
 });

@@ -60,6 +60,30 @@ export function screenFor(payment: Pick<CheckoutPayment, 'status'> | null): Scre
   }
 }
 
+export interface ProgressStep {
+  label: 'Details' | 'Verify' | 'Done';
+  state: 'done' | 'current' | 'todo' | 'failed';
+}
+
+/**
+ * The checkout's progress line. Three steps whatever the method, so it never changes shape
+ * partway: Verify is the OTP for cards and the bank's approval for UPI.
+ */
+export function progressSteps(screen: Screen): ProgressStep[] {
+  const current = { form: 0, otp: 1, processing: 1, success: 3, failure: 3 }[screen];
+  return (['Details', 'Verify', 'Done'] as const).map((label, i) => ({
+    label,
+    state:
+      screen === 'failure' && i === 2
+        ? 'failed'
+        : i < current
+          ? 'done'
+          : i === current
+            ? 'current'
+            : 'todo',
+  }));
+}
+
 const FAILURE_MESSAGES: Record<string, string> = {
   insufficient_funds: 'Your bank declined the payment: insufficient funds.',
   card_declined: 'Your card was declined.',

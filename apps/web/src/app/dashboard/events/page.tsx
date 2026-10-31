@@ -1,16 +1,25 @@
-import { randomUUID } from 'node:crypto';
 import Link from 'next/link';
 import { Suspense } from 'react';
-import type { EventResponse } from '@gateway/shared';
-import { ActionButton } from '@/components/dashboard/action-button';
-import { LoadingText } from '@/components/dashboard/loading-text';
+import { WEBHOOK_EVENT_TYPES, type EventResponse } from '@gateway/shared';
+import { EventCard } from '@/components/dashboard/event-card';
 import { EmptyState, LoadError, PageHeader } from '@/components/dashboard/page-header';
 import { Pager } from '@/components/dashboard/pager';
-import { StatusBadge } from '@/components/dashboard/status-badge';
+import { CardsSkeleton } from '@/components/dashboard/skeletons';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
 import { listEvents } from '@/lib/dashboard-api';
-import { formatDateTime, statusTone } from '@/lib/dashboard-format';
 import { requireMerchant } from '@/lib/session';
-import { replayEvent } from './actions';
+
+const DELIVERY_STATUSES = ['failed', 'pending', 'succeeded'] as const;
+type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
+
+type Search = Awaited<PageProps<'/dashboard/events'>['searchParams']>;
+
+function one(value: Search[string]): string | undefined {
+  return typeof value === 'string' && value !== '' ? value : undefined;
+}
+
+const selectStyles = 'h-9 rounded-md border border-input bg-background px-3 text-sm';
 
 export default function EventsPage({ searchParams }: PageProps<'/dashboard/events'>) {
   return (
@@ -19,7 +28,7 @@ export default function EventsPage({ searchParams }: PageProps<'/dashboard/event
         Everything we told your webhook endpoints, and how each delivery went. Replay sends the same
         event again, with the same webhook-id, so a receiver that already has it can skip it.
       </PageHeader>
-      <Suspense fallback={<LoadingText />}>
+      <Suspense fallback={<CardsSkeleton />}>
         <Events searchParams={searchParams} />
       </Suspense>
     </section>
@@ -28,112 +37,77 @@ export default function EventsPage({ searchParams }: PageProps<'/dashboard/event
 
 async function Events({ searchParams }: Pick<PageProps<'/dashboard/events'>, 'searchParams'>) {
   const { merchantId } = await requireMerchant();
-  const { starting_after } = await searchParams;
-  const after = typeof starting_after === 'string' && starting_after ? starting_after : undefined;
+  const search = await searchParams;
+  // Anything not on these lists is ignored rather than sent to the API.
+  const type = WEBHOOK_EVENT_TYPES.find((t) => t === one(search.type)) as
+    EventResponse['type'] | undefined;
+  const status = DELIVERY_STATUSES.find((s) => s === one(search.delivery_status)) as
+    DeliveryStatus | undefined;
+  const after = one(search.starting_after);
 
-  const page = await listEvents(merchantId, { starting_after: after });
-  if (!page.ok) return <LoadError message={page.error.message} />;
-  if (page.data.data.length === 0) {
-    return (
-      <EmptyState>
-        No events yet. They appear when payments, refunds or settlements happen.
-      </EmptyState>
-    );
-  }
+  const page = await listEvents(merchantId, {
+    type,
+    delivery_status: status,
+    starting_after: after,
+  });
 
   return (
     <>
-      <ul className="space-y-4">
-        {page.data.data.map((event) => (
-          <EventCard key={event.id} event={event} />
-        ))}
-      </ul>
-      <Pager
-        path="/dashboard/events"
-        params={{ starting_after: after }}
-        hasMore={page.data.has_more}
-        lastId={page.data.data.at(-1)?.id}
-      />
-    </>
-  );
-}
-
-function objectIdOf(event: EventResponse): string | undefined {
-  const object = event.data.object as { id?: unknown } | undefined;
-  return typeof object?.id === 'string' ? object.id : undefined;
-}
-
-function EventCard({ event }: { event: EventResponse }) {
-  const objectId = objectIdOf(event);
-  return (
-    <li className="rounded-card border border-border p-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-1">
-          <p className="font-mono text-sm font-semibold">{event.type}</p>
-          <p className="text-xs text-muted-foreground">
-            {event.id} · {formatDateTime(event.created_at)}
-            {objectId && (
-              <>
-                {' · '}
-                {objectId.startsWith('pay_') ? (
-                  <Link
-                    href={`/dashboard/payments/${objectId}`}
-                    className="underline underline-offset-4"
-                  >
-                    {objectId}
-                  </Link>
-                ) : (
-                  objectId
-                )}
-              </>
-            )}
-          </p>
-        </div>
-        <ActionButton
-          action={replayEvent.bind(null, event.id)}
-          label="Replay"
-          pendingLabel="Queueing…"
-          // A new key each render: a double click queues one replay, not two.
-          idempotencyKey={randomUUID()}
-        />
-      </div>
-
-      {event.deliveries.length === 0 ? (
-        <p className="mt-4 text-sm text-muted-foreground">
-          {event.dispatched_at ? 'No endpoint was subscribed to this event.' : 'Not sent yet.'}
-        </p>
-      ) : (
-        <table className="mt-4 w-full text-sm">
-          <thead className="text-left text-xs text-muted-foreground uppercase">
-            <tr>
-              <th className="py-1 font-medium">Delivery</th>
-              <th className="py-1 font-medium">Status</th>
-              <th className="py-1 font-medium">Attempts</th>
-              <th className="py-1 font-medium">Last answer</th>
-              <th className="py-1 font-medium">Next try</th>
-            </tr>
-          </thead>
-          <tbody>
-            {event.deliveries.map((delivery) => (
-              <tr key={delivery.id} className="border-t border-border align-top">
-                <td className="py-2 font-mono text-xs">{delivery.id}</td>
-                <td className="py-2">
-                  <StatusBadge tone={statusTone(delivery.status)}>{delivery.status}</StatusBadge>
-                </td>
-                <td className="py-2 tabular-nums">{delivery.attempt_count}</td>
-                <td className="py-2 text-muted-foreground">
-                  {delivery.last_response_status
-                    ? `HTTP ${delivery.last_response_status} · ${delivery.last_response_ms} ms`
-                    : (delivery.last_error ?? '—')}
-                </td>
-                <td className="py-2 text-muted-foreground">
-                  {delivery.status === 'pending' ? formatDateTime(delivery.next_attempt_at) : '—'}
-                </td>
-              </tr>
+      <form method="get" className="mb-6 flex flex-wrap items-end gap-4 rounded-card bg-card p-4">
+        <div className="space-y-2">
+          <Label htmlFor="type">Event type</Label>
+          <select id="type" name="type" defaultValue={type ?? ''} className={selectStyles}>
+            <option value="">Any type</option>
+            {WEBHOOK_EVENT_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
             ))}
-          </tbody>
-        </table>
+          </select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="delivery_status">Has a delivery that</Label>
+          <select
+            id="delivery_status"
+            name="delivery_status"
+            defaultValue={status ?? ''}
+            className={selectStyles}
+          >
+            <option value="">Any status</option>
+            <option value="failed">Failed</option>
+            <option value="pending">Is pending (retrying)</option>
+            <option value="succeeded">Succeeded</option>
+          </select>
+        </div>
+        <Button type="submit">Filter</Button>
+        <Button asChild variant="outline">
+          <Link href="/dashboard/events">Clear</Link>
+        </Button>
+      </form>
+
+      {!page.ok ? (
+        <LoadError message={page.error.message} />
+      ) : page.data.data.length === 0 ? (
+        <EmptyState>
+          {type || status
+            ? 'No events match these filters.'
+            : 'No events yet. They appear when payments, refunds or settlements happen.'}
+        </EmptyState>
+      ) : (
+        <>
+          <ul className="space-y-4">
+            {page.data.data.map((event) => (
+              <EventCard key={event.id} event={event} />
+            ))}
+          </ul>
+          <Pager
+            path="/dashboard/events"
+            params={{ type, delivery_status: status, starting_after: after }}
+            hasMore={page.data.has_more}
+            lastId={page.data.data.at(-1)?.id}
+          />
+        </>
       )}
-    </li>
+    </>
   );
 }

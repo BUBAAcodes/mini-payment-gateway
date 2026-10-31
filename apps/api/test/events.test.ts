@@ -154,6 +154,37 @@ describe('GET /v1/events', () => {
     }
   });
 
+  it('filters by event type', async () => {
+    const captured = await newEvent({ type: 'payment.captured' });
+    await newEvent({ type: 'refund.processed' });
+
+    const res = await listEvents('?type=payment.captured').expect(200);
+    expect(res.body.data.map((e: { id: string }) => e.id)).toEqual([captured.id]);
+  });
+
+  it('filters to events with at least one delivery in a given status', async () => {
+    const endpoint = await newEndpoint('https://shop.test/hooks');
+    const failing = await newEvent();
+    const fine = await newEvent();
+    await newEvent(); // never sent: no deliveries at all
+    for (const [event, status] of [
+      [failing, 'failed'],
+      [fine, 'succeeded'],
+    ] as const) {
+      await db.webhookDelivery.create({
+        data: { id: newId('wd'), eventId: event.id, endpointId: endpoint.id, status },
+      });
+    }
+
+    const res = await listEvents('?delivery_status=failed').expect(200);
+    expect(res.body.data.map((e: { id: string }) => e.id)).toEqual([failing.id]);
+  });
+
+  it('rejects an unknown type or delivery status', async () => {
+    await listEvents('?type=order.made').expect(400);
+    await listEvents('?delivery_status=lost').expect(400);
+  });
+
   it('needs an API key', async () => {
     const res = await request(app).get('/v1/events');
     expect(res.status).toBe(401);

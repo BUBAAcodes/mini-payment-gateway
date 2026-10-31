@@ -5,6 +5,7 @@ import { screenFor, type CheckoutPayment, type Screen } from '@/lib/checkout';
 import { OrderSummary } from './order-summary';
 import { OtpScreen } from './otp-screen';
 import { PayForm } from './pay-form';
+import { ProgressLine } from './progress-line';
 import { ProcessingScreen } from './processing-screen';
 import { ResultScreen } from './result-screen';
 import { SCREEN_HEADING_ID } from './ui';
@@ -68,6 +69,7 @@ export function CheckoutFlow({ order, initialPayment }: CheckoutFlowProps) {
         orderId={order.id}
       />
       <div>
+        <ProgressLine screen={screen} />
         {screen === 'form' || !payment ? (
           <PayForm order={order} defaultMethod={payment?.method} onResult={show} onStale={reload} />
         ) : screen === 'processing' ? (

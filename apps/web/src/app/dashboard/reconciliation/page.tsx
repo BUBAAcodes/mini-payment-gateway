@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import type { ReconciliationIssueResponse } from '@gateway/shared';
 import { ActionButton } from '@/components/dashboard/action-button';
-import { LoadingText } from '@/components/dashboard/loading-text';
+import { CardsSkeleton } from '@/components/dashboard/skeletons';
 import { EmptyState, LoadError, PageHeader } from '@/components/dashboard/page-header';
 import { Pager } from '@/components/dashboard/pager';
 import { StatusBadge } from '@/components/dashboard/status-badge';
@@ -23,7 +23,7 @@ export default function ReconciliationPage({
         Each day we compare our records with the bank&apos;s settlement file. These are the
         differences: for example a payment the bank approved that we never heard about.
       </PageHeader>
-      <Suspense fallback={<LoadingText />}>
+      <Suspense fallback={<CardsSkeleton />}>
         <Issues searchParams={searchParams} />
       </Suspense>
     </section>
