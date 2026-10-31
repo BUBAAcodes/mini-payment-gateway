@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./seed": "./src/seed.ts",
     "./testing": "./src/testing/index.ts",
     "./testing/global-setup": "./src/testing/global-setup.ts"
   },
