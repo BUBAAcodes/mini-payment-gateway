@@ -60,9 +60,13 @@ beforeEach(() => {
   app = createStoreApp({ config, gateway: stub.gateway, orders, logger: createLogger('silent') });
 });
 
-/** Clicks Buy and returns the gateway order the store created. */
-async function buy(): Promise<GatewayOrder> {
-  const res = await request(app).post('/buy').expect(303);
+/** Clicks Buy (optionally with a size picked) and returns the gateway order the store created. */
+async function buy(size?: string): Promise<GatewayOrder> {
+  const res = await request(app)
+    .post('/buy')
+    .type('form')
+    .send(size ? { size } : {})
+    .expect(303);
   const order = (await stub.gateway.createOrder.mock.results.at(-1)!.value) as GatewayOrder;
   expect(res.headers.location).toBe(order.checkout_url);
   return order;
@@ -129,6 +133,30 @@ describe('GET /', () => {
     expect(res.text).toContain('₹500.00');
     expect(res.text).toMatch(/<form[^>]+method="post"[^>]+action="\/buy"/);
   });
+
+  it('offers sizes S to XL as radio buttons, with M picked', async () => {
+    const res = await request(app).get('/').expect(200);
+    for (const size of ['S', 'M', 'L', 'XL']) {
+      expect(res.text).toMatch(new RegExp(`<input[^>]+name="size"[^>]+value="${size}"`));
+    }
+    expect(res.text).toMatch(/<input[^>]+value="M"[^>]+checked/);
+  });
+
+  it('draws the shirt inline and loads no images or scripts from anywhere', async () => {
+    const res = await request(app).get('/').expect(200);
+    expect(res.text).toContain('<svg');
+    expect(res.text).not.toContain('<img');
+    expect(res.text).not.toContain('<script');
+  });
+
+  it('links the shop and says it is test mode, on every page', async () => {
+    for (const path of ['/', `/orders/${newId('order')}`]) {
+      const res = await request(app).get(path);
+      expect(res.text).toContain('href="/"');
+      expect(res.text).toMatch(/test mode/i);
+      expect(res.text).toMatch(/kept in memory/i);
+    }
+  });
 });
 
 describe('security headers', () => {
@@ -138,6 +166,14 @@ describe('security headers', () => {
     expect(csp).toContain("default-src 'self'");
     expect(csp).not.toContain('form-action');
     expect(csp).not.toContain('upgrade-insecure-requests');
+  });
+
+  it('allows the Inter web font from Google Fonts', async () => {
+    const res = await request(app).get('/').expect(200);
+    const csp = String(res.headers['content-security-policy']);
+    expect(csp).toMatch(/style-src [^;]*https:/);
+    expect(csp).toMatch(/font-src [^;]*https:/);
+    expect(res.text).toContain('https://fonts.googleapis.com/css2?family=Inter');
   });
 });
 
@@ -168,6 +204,23 @@ describe('POST /buy', () => {
     });
   });
 
+  it('sends the chosen size to the gateway in the order notes, and remembers it', async () => {
+    const order = await buy('L');
+    expect(stub.calls[0]!.input.notes).toEqual({ size: 'L' });
+    expect(orders.getOrder(order.id)!.size).toBe('L');
+  });
+
+  it('defaults to size M', async () => {
+    await buy();
+    expect(stub.calls[0]!.input.notes).toEqual({ size: 'M' });
+  });
+
+  it('refuses a size it does not sell, without creating an order', async () => {
+    const res = await request(app).post('/buy').type('form').send({ size: 'XXL' }).expect(400);
+    expect(res.text).toMatch(/size/i);
+    expect(stub.gateway.createOrder).not.toHaveBeenCalled();
+  });
+
   it('uses a new idempotency key for each purchase', async () => {
     await buy();
     await buy();
@@ -184,16 +237,17 @@ describe('POST /buy', () => {
 });
 
 describe('GET /payments/callback', () => {
-  it('accepts a valid signature and shows "confirming" without fulfilling', async () => {
+  it('accepts a valid signature and redirects to the order page without fulfilling', async () => {
     const order = await buy();
     const p = payment(order);
     const res = await request(app)
       .get('/payments/callback')
       .query(callbackQuery(order.id, p.id, 'captured'))
-      .expect(200);
+      .expect(303);
 
-    expect(res.text).toMatch(/payment received, confirming/i);
-    expect(res.text).toContain(`url=/orders/${order.id}`);
+    // A redirect, not a page: the callback never becomes a history entry the Back button could
+    // land on and be bounced forward from.
+    expect(res.headers.location).toBe(`/orders/${order.id}`);
     // The redirect's status isn't signed: only a webhook plus a re-fetch fulfils.
     expect(orders.getOrder(order.id)!.status).toBe('awaiting_payment');
     expect(stub.gateway.getPayment).not.toHaveBeenCalled();
@@ -240,14 +294,14 @@ describe('GET /payments/callback', () => {
       .expect(404);
   });
 
-  it('offers to try again after a failed payment', async () => {
+  it('passes a failed result on to the order page as a hint', async () => {
     const order = await buy();
     const res = await request(app)
       .get('/payments/callback')
       .query(callbackQuery(order.id, 'pay_x', 'failed'))
-      .expect(200);
-    expect(res.text).toMatch(/not completed/i);
-    expect(res.text).toContain(`href="${order.checkout_url}"`);
+      .expect(303);
+    expect(res.headers.location).toBe(`/orders/${order.id}?payment=failed`);
+    expect(orders.getOrder(order.id)!.status).toBe('awaiting_payment');
   });
 });
 
@@ -393,11 +447,48 @@ describe('POST /webhooks/gateway', () => {
 });
 
 describe('GET /orders/:id', () => {
-  it('shows a waiting order and refreshes itself until something changes', async () => {
-    const order = await buy();
+  it('shows a waiting order as confirming, and refreshes only itself', async () => {
+    const order = await buy('L');
     const res = await request(app).get(`/orders/${order.id}`).expect(200);
-    expect(res.text).toMatch(/waiting for payment confirmation/i);
-    expect(res.text).toContain('http-equiv="refresh"');
+    expect(res.text).toMatch(/payment received, confirming/i);
+    // Reloads the same URL: no new history entry, so Back still goes to the shop.
+    expect(res.text).toMatch(/http-equiv="refresh"\s+content="2"/);
+    expect(res.text).not.toContain('url=');
+    expect(res.text).toContain('Size L');
+  });
+
+  it('offers a way back to the shop and another purchase', async () => {
+    const order = await buy('S');
+    const res = await request(app).get(`/orders/${order.id}`).expect(200);
+    expect(res.text).toMatch(/<a[^>]+href="\/"[^>]*>\s*Continue shopping/);
+    expect(res.text).toMatch(
+      /<form[^>]+action="\/buy"[\s\S]*name="size"[^>]+value="S"[\s\S]*Buy another/,
+    );
+  });
+
+  it('shows "not completed" with Try again when checkout says the payment failed', async () => {
+    const order = await buy();
+    const res = await request(app).get(`/orders/${order.id}?payment=failed`).expect(200);
+    expect(res.text).toMatch(/payment not completed/i);
+    expect(res.text).toContain(`href="${order.checkout_url}"`);
+    expect(res.text).not.toContain('http-equiv="refresh"');
+  });
+
+  it('ignores the failed hint once the webhook has fulfilled the order', async () => {
+    const order = await buy();
+    await sendWebhook(event('payment.captured', payment(order))).expect(200);
+    const res = await request(app).get(`/orders/${order.id}?payment=failed`).expect(200);
+    expect(res.text).toMatch(/fulfilled/i);
+    expect(res.text).not.toMatch(/not completed/i);
+  });
+
+  it('shows Try again after a payment.failed webhook', async () => {
+    const order = await buy();
+    await sendWebhook(event('payment.failed', payment(order, { status: 'failed' }))).expect(200);
+    const res = await request(app).get(`/orders/${order.id}`).expect(200);
+    expect(res.text).toMatch(/payment failed/i);
+    expect(res.text).toContain(`href="${order.checkout_url}"`);
+    expect(res.text).not.toContain('http-equiv="refresh"');
   });
 
   it('shows "fulfilled" once the webhook has arrived, and stops refreshing', async () => {

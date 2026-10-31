@@ -8,15 +8,8 @@ import { verifyCheckoutRedirect, verifyWebhook } from '@gateway/shared';
 import type { StoreConfig } from './config';
 import type { GatewayClient } from './gateway-client';
 import { assignRequestId } from './logger';
-import type { OrderStore } from './order-store';
-import {
-  PRODUCT,
-  callbackConfirmingPage,
-  callbackFailedPage,
-  errorPage,
-  orderPage,
-  productPage,
-} from './pages';
+import { SHIRT_SIZES, type OrderStore } from './order-store';
+import { PRODUCT, errorPage, orderPage, productPage } from './pages';
 import { gatewayEventSchema, handleGatewayWebhook } from './webhooks';
 
 export interface StoreDeps {
@@ -36,6 +29,9 @@ const callbackQuerySchema = z.object({
   status: z.string().max(32),
   signature: z.string().max(128),
 });
+
+/** The Buy form: just the size, M when none is picked. */
+const buyFormSchema = z.object({ size: z.enum(SHIRT_SIZES).default('M') });
 
 function requestIdOf(req: Request): string {
   return String(req.id);
@@ -70,7 +66,15 @@ export function createStoreApp({ config, gateway, orders, logger }: StoreDeps): 
   // Creates the gateway order, then sends the customer to the gateway's checkout page. The
   // idempotency key makes the client's retries safe: a timed-out attempt that actually worked is
   // replayed by the gateway instead of creating a second order.
-  app.post('/buy', async (req, res) => {
+  app.post('/buy', express.urlencoded({ extended: false, limit: '1kb' }), async (req, res) => {
+    const form = buyFormSchema.safeParse(req.body ?? {});
+    if (!form.success) {
+      return res
+        .status(400)
+        .type('html')
+        .send(errorPage('Pick a size', `We sell sizes ${SHIRT_SIZES.join(', ')}.`));
+    }
+    const { size } = form.data;
     const receipt = `store_${randomBytes(6).toString('hex')}`;
     try {
       const order = await gateway.createOrder(
@@ -79,6 +83,7 @@ export function createStoreApp({ config, gateway, orders, logger }: StoreDeps): 
           currency: 'INR',
           receipt,
           callback_url: `${config.STORE_BASE_URL}/payments/callback`,
+          notes: { size },
         },
         randomUUID(),
         requestIdOf(req),
@@ -87,6 +92,7 @@ export function createStoreApp({ config, gateway, orders, logger }: StoreDeps): 
         id: order.id,
         receipt,
         amount: order.amount,
+        size,
         checkoutUrl: order.checkout_url,
       });
       req.log.info({ orderId: order.id, receipt }, 'order created, sending customer to checkout');
@@ -103,8 +109,10 @@ export function createStoreApp({ config, gateway, orders, logger }: StoreDeps): 
   });
 
   // Where checkout sends the customer back. The signature proves the gateway made this link for
-  // this order and payment, but `status` isn't signed: it only picks which page to show. Nothing
-  // is fulfilled here; that waits for the webhook and a re-fetch.
+  // this order and payment, but `status` isn't signed: it is only passed on as a hint for which
+  // message to show. Nothing is fulfilled here; that waits for the webhook and a re-fetch.
+  // It answers with a redirect, never a page, so it doesn't become a history entry: pressing Back
+  // on the order page goes to the shop instead of bouncing through here.
   app.get('/payments/callback', (req, res) => {
     const query = callbackQuerySchema.safeParse(req.query);
     if (!query.success) {
@@ -128,9 +136,8 @@ export function createStoreApp({ config, gateway, orders, logger }: StoreDeps): 
         .type('html')
         .send(errorPage('Order not found', `We have no order ${order_id}.`));
     }
-    res
-      .type('html')
-      .send(status === 'failed' ? callbackFailedPage(order) : callbackConfirmingPage(order));
+    const orderUrl = `/orders/${encodeURIComponent(order.id)}`;
+    res.redirect(303, status === 'failed' ? `${orderUrl}?payment=failed` : orderUrl);
   });
 
   // Webhooks are verified against the exact bytes received, so this route reads the raw body
@@ -183,7 +190,7 @@ export function createStoreApp({ config, gateway, orders, logger }: StoreDeps): 
         .type('html')
         .send(errorPage('Order not found', `We have no order ${req.params.id}.`));
     }
-    res.type('html').send(orderPage(order));
+    res.type('html').send(orderPage(order, { checkoutSaidFailed: req.query.payment === 'failed' }));
   });
 
   app.use((_req, res) => {

@@ -43,7 +43,9 @@ function SuccessPanel({ order, payment }: Omit<ResultScreenProps, 'onTryAgain'>)
       const left = REDIRECT_DELAY_S - Math.floor((Date.now() - startedAt) / 1000);
       if (left > 0) return setSecondsLeft(left);
       clearInterval(tick);
-      window.location.assign(redirectUrl);
+      // replace, not assign: the merchant's page takes this one's place in history, so Back from
+      // there doesn't land on this success screen and get sent forward again.
+      window.location.replace(redirectUrl);
     }, 250);
     return () => clearInterval(tick);
   }, [redirectUrl]);

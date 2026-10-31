@@ -8,6 +8,8 @@ export interface CreateOrderRequest {
   currency: 'INR';
   receipt: string;
   callback_url: string;
+  /** Flat key-value pairs kept on the order, e.g. { size: 'L' }. */
+  notes?: Record<string, string>;
 }
 
 /** POST /v1/orders. */

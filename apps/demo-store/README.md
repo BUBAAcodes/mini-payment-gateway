@@ -10,9 +10,9 @@ A pretend merchant that sells one T-shirt for ₹500 through the gateway. It doe
 
 | Route                    | What it does                                                        |
 | ------------------------ | ------------------------------------------------------------------- |
-| `GET /`                  | Product page with a Buy button                                      |
-| `POST /buy`              | Creates a gateway order and redirects to checkout                   |
-| `GET /payments/callback` | Where checkout sends the customer back; checks the signature        |
+| `GET /`                  | Product page: size picker (S–XL) and a Buy button                   |
+| `POST /buy`              | Creates a gateway order (size in its notes), redirects to checkout  |
+| `GET /payments/callback` | Checks checkout's signature, then 303 to the order page (no page)   |
 | `POST /webhooks/gateway` | Receives signed webhooks                                            |
 | `GET /orders/:id`        | Order status; refreshes itself until the webhook marks it fulfilled |
 | `GET /health`            | Health check                                                        |

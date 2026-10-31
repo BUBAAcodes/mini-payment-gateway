@@ -6,6 +6,10 @@
  * retried). Nothing leaves `fulfilled`: webhooks may arrive out of order, and a late
  * payment.failed from an earlier attempt must not undo a shipped order.
  */
+/** The sizes the store sells. */
+export const SHIRT_SIZES = ['S', 'M', 'L', 'XL'] as const;
+export type ShirtSize = (typeof SHIRT_SIZES)[number];
+
 export type StoreOrderStatus = 'awaiting_payment' | 'payment_failed' | 'fulfilled';
 
 export interface StoreOrder {
@@ -14,6 +18,8 @@ export interface StoreOrder {
   /** The store's own reference, sent to the gateway as `receipt`. */
   receipt: string;
   amount: number;
+  /** The T-shirt size the customer picked. */
+  size: ShirtSize;
   /** Where the customer pays (or tries again after a failure). */
   checkoutUrl: string;
   status: StoreOrderStatus;
@@ -24,7 +30,9 @@ export interface StoreOrder {
 }
 
 export interface OrderStore {
-  recordOrder(order: Pick<StoreOrder, 'id' | 'receipt' | 'amount' | 'checkoutUrl'>): StoreOrder;
+  recordOrder(
+    order: Pick<StoreOrder, 'id' | 'receipt' | 'amount' | 'size' | 'checkoutUrl'>,
+  ): StoreOrder;
   getOrder(id: string): StoreOrder | undefined;
   /** True if this call fulfilled the order; false if it already was. */
   fulfilOrder(id: string, paymentId: string): boolean;
