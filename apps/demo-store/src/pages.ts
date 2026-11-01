@@ -261,10 +261,18 @@ interface OrderPageOptions {
    * message; the order itself changes only when a webhook arrives.
    */
   checkoutSaidFailed?: boolean;
+  /**
+   * The attempt checkout just sent the customer back from. Also unsigned and only a hint: if an
+   * earlier attempt is the one that failed, this is a retry whose webhook is still on its way.
+   */
+  checkoutPaymentId?: string;
 }
 
 /** What the order page says, and whether it keeps reloading to wait for a webhook. */
-function orderStatus(order: StoreOrder, { checkoutSaidFailed }: OrderPageOptions) {
+function orderStatus(
+  order: StoreOrder,
+  { checkoutSaidFailed, checkoutPaymentId }: OrderPageOptions,
+) {
   if (order.status === 'fulfilled') {
     return {
       pill: html`<span class="pill solid">Fulfilled</span>`,
@@ -274,7 +282,9 @@ function orderStatus(order: StoreOrder, { checkoutSaidFailed }: OrderPageOptions
       waiting: false,
     };
   }
-  if (order.status === 'payment_failed') {
+  const retrying =
+    checkoutPaymentId !== undefined && checkoutPaymentId !== order.paymentId && !checkoutSaidFailed;
+  if (order.status === 'payment_failed' && !retrying) {
     return {
       pill: html`<span class="pill danger">Payment failed</span>`,
       headline: 'Payment failed',

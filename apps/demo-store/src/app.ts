@@ -136,8 +136,10 @@ export function createStoreApp({ config, gateway, orders, logger }: StoreDeps): 
         .type('html')
         .send(errorPage('Order not found', `We have no order ${order_id}.`));
     }
-    const orderUrl = `/orders/${encodeURIComponent(order.id)}`;
-    res.redirect(303, status === 'failed' ? `${orderUrl}?payment=failed` : orderUrl);
+    // Hints for the order page: which attempt checkout just finished, and if it said it failed.
+    const hints = new URLSearchParams({ payment_id });
+    if (status === 'failed') hints.set('payment', 'failed');
+    res.redirect(303, `/orders/${encodeURIComponent(order.id)}?${hints}`);
   });
 
   // Webhooks are verified against the exact bytes received, so this route reads the raw body
@@ -190,7 +192,13 @@ export function createStoreApp({ config, gateway, orders, logger }: StoreDeps): 
         .type('html')
         .send(errorPage('Order not found', `We have no order ${req.params.id}.`));
     }
-    res.type('html').send(orderPage(order, { checkoutSaidFailed: req.query.payment === 'failed' }));
+    const { payment, payment_id } = req.query;
+    res.type('html').send(
+      orderPage(order, {
+        checkoutSaidFailed: payment === 'failed',
+        checkoutPaymentId: typeof payment_id === 'string' ? payment_id : undefined,
+      }),
+    );
   });
 
   app.use((_req, res) => {

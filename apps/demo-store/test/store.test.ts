@@ -247,7 +247,8 @@ describe('GET /payments/callback', () => {
 
     // A redirect, not a page: the callback never becomes a history entry the Back button could
     // land on and be bounced forward from.
-    expect(res.headers.location).toBe(`/orders/${order.id}`);
+    // It names the attempt checkout just finished, so the order page knows what it is waiting on.
+    expect(res.headers.location).toBe(`/orders/${order.id}?payment_id=${p.id}`);
     // The redirect's status isn't signed: only a webhook plus a re-fetch fulfils.
     expect(orders.getOrder(order.id)!.status).toBe('awaiting_payment');
     expect(stub.gateway.getPayment).not.toHaveBeenCalled();
@@ -300,7 +301,7 @@ describe('GET /payments/callback', () => {
       .get('/payments/callback')
       .query(callbackQuery(order.id, 'pay_x', 'failed'))
       .expect(303);
-    expect(res.headers.location).toBe(`/orders/${order.id}?payment=failed`);
+    expect(res.headers.location).toBe(`/orders/${order.id}?payment_id=pay_x&payment=failed`);
     expect(orders.getOrder(order.id)!.status).toBe('awaiting_payment');
   });
 });
@@ -480,6 +481,33 @@ describe('GET /orders/:id', () => {
     const res = await request(app).get(`/orders/${order.id}?payment=failed`).expect(200);
     expect(res.text).toMatch(/fulfilled/i);
     expect(res.text).not.toMatch(/not completed/i);
+  });
+
+  it('keeps confirming after a retry, while the earlier attempt is the one that failed', async () => {
+    // fail@test, then Try again with success@test: checkout sends the customer back before the
+    // retry's payment.captured webhook has arrived, so the order still says payment_failed.
+    const order = await buy();
+    const failed = payment(order, { status: 'failed', failure_reason: 'insufficient_funds' });
+    await sendWebhook(event('payment.failed', failed)).expect(200);
+    const retry = payment(order);
+
+    const res = await request(app).get(`/orders/${order.id}?payment_id=${retry.id}`).expect(200);
+    expect(res.text).toMatch(/payment received, confirming/i);
+    expect(res.text).toMatch(/http-equiv="refresh"\s+content="2"/);
+
+    // The reload after the webhook flips it to fulfilled.
+    await sendWebhook(event('payment.captured', retry)).expect(200);
+    const after = await request(app).get(`/orders/${order.id}?payment_id=${retry.id}`).expect(200);
+    expect(after.text).toMatch(/fulfilled/i);
+  });
+
+  it('shows the failure when checkout sent back the attempt that failed', async () => {
+    const order = await buy();
+    const failed = payment(order, { status: 'failed', failure_reason: 'insufficient_funds' });
+    await sendWebhook(event('payment.failed', failed)).expect(200);
+    const res = await request(app).get(`/orders/${order.id}?payment_id=${failed.id}`).expect(200);
+    expect(res.text).toMatch(/payment failed/i);
+    expect(res.text).not.toContain('http-equiv="refresh"');
   });
 
   it('shows Try again after a payment.failed webhook', async () => {

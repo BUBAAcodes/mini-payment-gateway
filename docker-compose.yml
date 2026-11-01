@@ -99,5 +99,15 @@ services:
       - '8025:8025'
       - '1025:1025'
 
+  # Load test runner for `pnpm test:load` (load/run.sh starts it; section 19: local Docker only).
+  k6:
+    image: grafana/k6:1.4.0
+    profiles: [load]
+    volumes:
+      - ./load:/load
+    depends_on:
+      api:
+        condition: service_healthy
+
 volumes:
   pgdata:
