@@ -25,6 +25,10 @@ RUN find . -name node_modules -type d -prune -exec rm -rf {} + \
 
 # ---- runtime: only what the API needs, running as the unprivileged "node" user ----
 FROM node:24-slim AS runtime
+# The app runs with plain `node`. npm, corepack and yarn come with the base image but are never
+# used here, and their bundled packages are where Trivy finds vulnerabilities, so remove them.
+RUN rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx \
+ /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-*
 ENV NODE_ENV=production PORT=4000
 WORKDIR /app
 COPY --from=build --chown=node:node /app/package.json /app/pnpm-workspace.yaml ./

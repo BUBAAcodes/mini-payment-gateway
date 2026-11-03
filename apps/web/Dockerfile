@@ -19,6 +19,10 @@ RUN pnpm --filter web build
 
 # ---- runtime: the standalone server and its traced files, as the unprivileged "node" user ----
 FROM node:24-slim AS runtime
+# The app runs with plain `node`. npm, corepack and yarn come with the base image but are never
+# used here, and their bundled packages are where Trivy finds vulnerabilities, so remove them.
+RUN rm -rf /usr/local/lib/node_modules /usr/local/bin/npm /usr/local/bin/npx \
+ /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-*
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
 WORKDIR /app
 # The standalone folder mirrors the repo (outputFileTracingRoot is the repo root). It leaves out
