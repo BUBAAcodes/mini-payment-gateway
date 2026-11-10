@@ -331,7 +331,20 @@ Tests that involve time (retries, 15-minute give-up, settlement delay) pass thei
 - **Images:** one multi-stage Dockerfile per app (`api`, `web`, `demo-store`), built from the repo root, running as a non-root user with a `HEALTHCHECK`.
 - **CI** ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) on every pull request and push to main: format check, lint, typecheck, unit and integration tests with coverage; Playwright against the Docker stack; build and Trivy-scan every image.
 - **On merge to main**, once those pass: push images to GHCR tagged with the commit SHA, and run `prisma migrate deploy` against the production database. Migrations run from CI because Render's free tier has no pre-deploy step, so they must stay backward compatible.
-- **Hosting plan (free tiers):** Render for the API and demo store, Vercel for the web app, Neon for Postgres, Upstash for Redis.
+- **Where it runs (free tiers):**
+
+  | Piece         | Service | Deploys how                                                                      |
+  | ------------- | ------- | -------------------------------------------------------------------------------- |
+  | API + jobs    | Render  | From main, once this commit's CI checks pass                                     |
+  | Demo store    | Render  | Same as the API                                                                  |
+  | Web           | Vercel  | From Git (root directory `apps/web`), with a preview deployment on every PR      |
+  | Postgres      | Neon    | Schema changes only through the CI `migrate` job, using its direct URL           |
+  | Redis         | Upstash | Nothing to deploy: it only holds rate-limit counters                             |
+  | Docker images | GHCR    | Public `ghcr.io/bubaacodes/gateway-{api,web,demo-store}`, tagged with the commit |
+
+- **GitHub settings the workflows need:** the secret `DIRECT_DATABASE_URL` (Neon's direct URL, for `migrate`), the variable `API_BASE_URL` and the secret `INTERNAL_CRON_SECRET` (for the daily [cron](../.github/workflows/cron.yml)). Without them, those jobs skip instead of failing.
+- **Branch protection on main:** the five CI checks (format/lint/typecheck/test, Playwright, and the three image builds) must pass before a merge.
+- **Sleep:** Render's free server sleeps after about 15 idle minutes. The cron retries while it wakes, and every background job catches up on overdue work at startup.
 
 [d1]: decisions/0001-fee-not-refunded.md
 [d2]: decisions/0002-settlement-marks-rows.md

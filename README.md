@@ -2,7 +2,11 @@
 
 [![CI](https://github.com/BUBAAcodes/mini-payment-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/BUBAAcodes/mini-payment-gateway/actions/workflows/ci.yml)
 
-**Live demo:** not deployed yet · **Demo login:** `demo@gateway.test` / `demo-password`
+**Live demo:** [dashboard](https://mini-payment-gateway-mauve.vercel.app) · [API docs](https://mini-payment-gateway-cper.onrender.com/docs) · **Demo login:** `demo@gateway.test` / `demo-password`
+
+<!-- TODO: add the live demo store link to the line above -->
+
+The API runs on a free server that sleeps when idle, so the first request can take about a minute.
 
 <!-- TODO: add a short GIF of buy → pay → "fulfilled" here, e.g. ![Demo](docs/demo.gif) -->
 
@@ -155,7 +159,7 @@ pnpm typecheck && pnpm lint && pnpm format:check
 
 Stop `docker compose` first for `test:e2e` and `test:load`: they start their own stack on the same ports.
 
-- **613 Vitest tests** across the five packages, plus **3 Playwright** journeys (UPI success, card with OTP, a declined payment then a successful retry).
+- **815 Vitest tests** across the five packages, plus **3 Playwright** journeys (UPI success, card with OTP, a declined payment then a successful retry).
 - Integration tests run against real Postgres, and cover the concurrency cases: 20 parallel requests with one idempotency key make one order, ten simultaneous refunds never over-refund, two webhook senders never send the same delivery twice, and a capture that fails half-way leaves nothing behind.
 - **Load test:** 200 concurrent `POST /v1/orders` with one idempotency key created exactly **1 order** (199 replays), p95 latency **934 ms**, on local Docker.
 
