@@ -2,13 +2,11 @@
 
 [![CI](https://github.com/BUBAAcodes/mini-payment-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/BUBAAcodes/mini-payment-gateway/actions/workflows/ci.yml)
 
-**Live demo:** [dashboard](https://mini-payment-gateway-mauve.vercel.app) · [API docs](https://mini-payment-gateway-cper.onrender.com/docs) · **Demo login:** `demo@gateway.test` / `demo-password`
+**Live demo:** [demo store](https://gateway-store.onrender.com) · [dashboard](https://mini-payment-gateway-mauve.vercel.app) · [API docs](https://mini-payment-gateway-cper.onrender.com/docs) · **Demo login:** `demo@gateway.test` / `demo-password`
 
-<!-- TODO: add the live demo store link to the line above -->
+The API and the demo store run on free servers that sleep when idle, so the first request to each can take about a minute.
 
-The API runs on a free server that sleeps when idle, so the first request can take about a minute.
-
-<!-- TODO: add a short GIF of buy → pay → "fulfilled" here, e.g. ![Demo](docs/demo.gif) -->
+![Buying a T-shirt on the demo store, paying by UPI on the checkout page, and the order turning to "Fulfilled"](docs/demo.gif)
 
 A small, test-mode payment gateway, in the spirit of Razorpay or Stripe, with a fake bank and no real money. A shop asks the gateway to create an order, the customer pays on the gateway's checkout page, and a simulated bank approves or declines. The gateway records every rupee in a double-entry ledger, tells the shop with signed webhooks, pays the shop its share once a day, and checks its records against the bank's. The point of the project is the hard part of payments: making sure money is never charged twice, never lost, and always adds up.
 
