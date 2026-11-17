@@ -13,14 +13,14 @@
   "dependencies": {
     "@gateway/db": "workspace:*",
     "@gateway/shared": "workspace:*",
-    "better-auth": "^1.7.14",
+    "better-auth": "^1.7.18",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "lucide-react": "^1.65.0",
-    "next": "16.4.3",
+    "lucide-react": "^1.70.0",
+    "next": "16.4.6",
     "radix-ui": "^1.8.1",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "server-only": "^0.0.1",
     "tailwind-merge": "^3.7.0"
   },
@@ -29,12 +29,12 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@vitest/coverage-v8": "^5.0.5",
+    "@vitest/coverage-v8": "^5.1.0",
     "eslint": "^9",
-    "eslint-config-next": "16.4.3",
+    "eslint-config-next": "16.4.6",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^5.0.5"
+    "vitest": "^5.1.0"
   },
   "packageManager": "pnpm@10.26.2"
 }
